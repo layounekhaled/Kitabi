@@ -1,0 +1,93 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Category {
+  id    String @id @default(cuid())
+  nameFr String
+  nameAr String
+  nameEn String
+  slug  String @unique
+  books Book[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Book {
+  id              String   @id @default(cuid())
+  isbn            String   @unique
+  title           String
+  author          String
+  description     String?
+  coverUrl        String?
+  publisher       String?
+  pageCount       Int?
+  language        String   // "ar", "fr", "en"
+  publishDate     String?
+  categorySlug    String?
+  category        Category? @relation(fields: [categorySlug], references: [slug])
+  priceSale       Float?
+  pricePrint      Float?
+  margin          Float?
+  printDelay      String?  // e.g. "3-5 jours"
+  isAvailable     Boolean  @default(true)
+  isDraft         Boolean  @default(true)
+  isPublished     Boolean  @default(false)
+  socialPublished Boolean  @default(false)
+  orderItems      OrderItem[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Order {
+  id            String   @id @default(cuid())
+  orderNumber   String   @unique
+  fullName      String
+  phone         String
+  wilaya        String
+  commune       String
+  address       String
+  note          String?
+  status        String   @default("nouvelle") // nouvelle, confirmee, en_impression, prete_a_livrer, expediee, livree, annulee
+  totalAmount   Float
+  items         OrderItem[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  bookId    String
+  book      Book    @relation(fields: [bookId], references: [id])
+  quantity  Int     @default(1)
+  unitPrice Float
+}
+
+model SocialPost {
+  id          String   @id @default(cuid())
+  bookId      String?
+  platform    String   // "facebook", "instagram"
+  content     String
+  imageUrl    String?
+  scheduledAt DateTime?
+  publishedAt DateTime?
+  status      String   @default("brouillon") // brouillon, programmee, publiee, echouee
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

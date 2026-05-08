@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" rx="96" fill="#1B2A4A"/>
+  <path d="M160 140C160 140 180 128 220 128C260 128 280 140 280 140V372C280 372 260 364 220 364C180 364 160 372 160 372V140Z" fill="#C9A84C" stroke="#C9A84C" stroke-width="4"/>
+  <path d="M280 140C280 140 300 128 340 128C380 128 400 140 400 140V372C400 372 380 364 340 364C300 364 280 372 280 372V140Z" fill="#F5F0E8" stroke="#C9A84C" stroke-width="4"/>
+  <line x1="280" y1="140" x2="280" y2="372" stroke="#C9A84C" stroke-width="3"/>
+  <text x="256" y="440" text-anchor="middle" font-family="serif" font-size="72" font-weight="bold" fill="#C9A84C">Kitabi</text>
+</svg>
