@@ -258,6 +258,9 @@ type TranslationKeys = {
     isAvailable: string
     isDraft: string
     isPublished: string
+    bulkImport: string
+    isbnListLabel: string
+    importAll: string
     saveBook: string
     updateBook: string
     addCategory: string
@@ -608,6 +611,9 @@ const translations: Record<Language, TranslationKeys> = {
       isAvailable: 'Disponible',
       isDraft: 'Brouillon',
       isPublished: 'Publié',
+      bulkImport: 'Import en masse',
+      isbnListLabel: 'Liste ISBN (un par ligne)',
+      importAll: 'Tout importer',
       saveBook: 'Enregistrer le livre',
       updateBook: 'Mettre à jour le livre',
       addCategory: 'Ajouter une catégorie',
@@ -954,6 +960,9 @@ const translations: Record<Language, TranslationKeys> = {
       isAvailable: 'متوفر',
       isDraft: 'مسودة',
       isPublished: 'منشور',
+      bulkImport: 'استيراد جماعي',
+      isbnListLabel: 'قائمة ردمك (واحد في كل سطر)',
+      importAll: 'استيراد الكل',
       saveBook: 'حفظ الكتاب',
       updateBook: 'تحديث الكتاب',
       addCategory: 'إضافة فئة',
@@ -1300,6 +1309,9 @@ const translations: Record<Language, TranslationKeys> = {
       isAvailable: 'Available',
       isDraft: 'Draft',
       isPublished: 'Published',
+      bulkImport: 'Bulk Import',
+      isbnListLabel: 'ISBN list (one per line)',
+      importAll: 'Import All',
       saveBook: 'Save Book',
       updateBook: 'Update Book',
       addCategory: 'Add Category',

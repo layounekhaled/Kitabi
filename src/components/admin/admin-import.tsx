@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from '@/lib/i18n'
 import { getAuthHeaders } from '@/lib/admin-auth'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -84,12 +84,12 @@ export default function AdminImport() {
   const [categories, setCategories] = useState<Array<{ id: string; slug: string; nameFr: string }>>([])
 
   // Load categories
-  useState(() => {
+  useEffect(() => {
     fetch('/api/categories')
       .then((r) => r.json())
       .then((d) => setCategories(d.categories || []))
       .catch(() => {})
-  })
+  }, [])
 
   const handleLookup = async () => {
     if (!isbn.trim()) return
@@ -175,9 +175,32 @@ export default function AdminImport() {
         body: JSON.stringify({ isbns: isbnList }),
       })
       const data = await res.json()
-      setImportResults(data.results || [])
-      const imported = (data.results || []).filter((r: ImportResult) => r.status === 'imported').length
-      toast.success(`${imported} book(s) imported`)
+      // API returns { imported, duplicates, notFound, errors, summary }
+      // Convert to ImportResult[] format for the results table
+      const results: ImportResult[] = [
+        ...(data.imported || []).map((r: { isbn: string; title: string }) => ({
+          isbn: r.isbn,
+          status: 'imported' as const,
+          title: r.title,
+        })),
+        ...(data.duplicates || []).map((r: { isbn: string; title: string }) => ({
+          isbn: r.isbn,
+          status: 'duplicate' as const,
+          title: r.title,
+        })),
+        ...(data.notFound || []).map((isbn: string) => ({
+          isbn,
+          status: 'not_found' as const,
+        })),
+        ...(data.errors || []).map((r: { isbn: string; error: string }) => ({
+          isbn: r.isbn,
+          status: 'error' as const,
+          message: r.error,
+        })),
+      ]
+      setImportResults(results)
+      const importedCount = results.filter((r) => r.status === 'imported').length
+      toast.success(`${importedCount} book(s) imported`)
       setBulkIsbns('')
     } catch {
       toast.error(t.admin.importError)
@@ -347,12 +370,12 @@ export default function AdminImport() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base font-semibold flex items-center gap-2">
               <FileDown className="w-4 h-4 text-amber-500" />
-              Bulk ISBN Import
+              {t.admin.bulkImport || 'Import en masse'}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-1.5">
-              <Label className="text-xs">ISBN list (one per line)</Label>
+              <Label className="text-xs">{t.admin.isbnListLabel || 'Liste ISBN (un par ligne)'}</Label>
               <Textarea
                 value={bulkIsbns}
                 onChange={(e) => setBulkIsbns(e.target.value)}
@@ -368,7 +391,7 @@ export default function AdminImport() {
               className="w-full bg-amber-500 hover:bg-amber-600 text-white gap-2"
             >
               {bulkImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              Import All
+              {t.admin.importAll || 'Tout importer'}
             </Button>
 
             {/* Import Results */}

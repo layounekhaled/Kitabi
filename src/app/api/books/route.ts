@@ -19,6 +19,8 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '12')
     const includeDrafts = searchParams.get('includeDrafts') === 'true' && isAdmin(request)
+    const filterIsPublished = searchParams.get('isPublished')
+    const filterIsDraft = searchParams.get('isDraft')
 
     const skip = (page - 1) * limit
 
@@ -30,6 +32,14 @@ export async function GET(request: NextRequest) {
       where.isDraft = false
     }
 
+    // Admin status filters (only when includeDrafts is true)
+    if (includeDrafts && filterIsPublished === 'true') {
+      where.isPublished = true
+    }
+    if (includeDrafts && filterIsDraft === 'true') {
+      where.isDraft = true
+    }
+
     if (language) {
       where.language = language
     }
@@ -39,6 +49,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (search) {
+      // SQLite LIKE is case-insensitive for ASCII by default
       where.OR = [
         { title: { contains: search } },
         { author: { contains: search } },
