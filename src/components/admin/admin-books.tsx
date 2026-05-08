@@ -91,11 +91,147 @@ interface Book {
 
 const STATUS_FILTERS = ['all', 'published', 'draft'] as const
 
+// Extracted table component to avoid duplication
+function BooksTable({
+  books,
+  t,
+  onEdit,
+  onDelete,
+  onTogglePublish,
+  total,
+  page,
+  totalPages,
+  onPageChange,
+}: {
+  books: Book[]
+  t: ReturnType<typeof useTranslation>['t']
+  onEdit: (book: Book) => void
+  onDelete: (book: Book) => void
+  onTogglePublish: (book: Book) => void
+  total: number
+  page: number
+  totalPages: number
+  onPageChange: (page: number) => void
+}) {
+  return (
+    <>
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-12"></TableHead>
+              <TableHead>{t.book.title}</TableHead>
+              <TableHead className="hidden md:table-cell">{t.book.author}</TableHead>
+              <TableHead className="hidden lg:table-cell">ISBN</TableHead>
+              <TableHead>{t.book.price}</TableHead>
+              <TableHead>{t.common.status}</TableHead>
+              <TableHead className="text-right">{t.common.actions}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {books.map((book) => (
+              <TableRow key={book.id}>
+                <TableCell>
+                  {book.coverUrl ? (
+                    <img
+                      src={book.coverUrl}
+                      alt={book.title}
+                      className="w-8 h-11 object-cover rounded shadow-sm"
+                    />
+                  ) : (
+                    <div className="w-8 h-11 bg-slate-100 rounded flex items-center justify-center">
+                      <BookOpen className="w-3 h-3 text-slate-400" />
+                    </div>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <div className="max-w-[200px] truncate font-medium text-sm">{book.title}</div>
+                </TableCell>
+                <TableCell className="hidden md:table-cell text-sm text-slate-600">
+                  <div className="max-w-[150px] truncate">{book.author}</div>
+                </TableCell>
+                <TableCell className="hidden lg:table-cell font-mono text-xs text-slate-500">
+                  {book.isbn}
+                </TableCell>
+                <TableCell className="text-sm font-medium">
+                  {book.priceSale ? `${book.priceSale} ${t.common.da}` : '-'}
+                </TableCell>
+                <TableCell>
+                  <div className="flex gap-1">
+                    {book.isPublished && (
+                      <Badge className="bg-green-100 text-green-700 text-[10px]">{t.admin.published}</Badge>
+                    )}
+                    {book.isDraft && (
+                      <Badge className="bg-yellow-100 text-yellow-700 text-[10px]">{t.admin.draft}</Badge>
+                    )}
+                    {!book.isAvailable && (
+                      <Badge className="bg-red-100 text-red-700 text-[10px]">{t.book.unavailable}</Badge>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => onTogglePublish(book)}
+                      title={book.isPublished ? t.admin.unpublish : t.admin.publish}
+                    >
+                      {book.isPublished ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => onEdit(book)}>
+                      <Pencil className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => onDelete(book)}
+                      className="text-red-500 hover:text-red-600"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Pagination */}
+      <div className="flex items-center justify-between px-4 py-3 border-t">
+        <p className="text-xs text-slate-500">
+          {t.common.showing} {books.length} {t.common.of} {total}
+        </p>
+        <div className="flex gap-1">
+          <Button
+            variant="outline"
+            size="icon"
+            disabled={page <= 1}
+            onClick={() => onPageChange(Math.max(1, page - 1))}
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            disabled={page >= totalPages}
+            onClick={() => onPageChange(page + 1)}
+          >
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+    </>
+  )
+}
+
 export default function AdminBooks() {
   const { t } = useTranslation()
   const [books, setBooks] = useState<Book[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -132,7 +268,12 @@ export default function AdminBooks() {
   })
 
   const fetchBooks = useCallback(async () => {
-    setLoading(true)
+    // Use refreshing for subsequent fetches to avoid skeleton flash
+    if (loading && books.length === 0) {
+      setLoading(true)
+    } else {
+      setRefreshing(true)
+    }
     try {
       const params = new URLSearchParams({
         page: page.toString(),
@@ -155,6 +296,7 @@ export default function AdminBooks() {
       toast.error('Erreur')
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
   }, [page, search, statusFilter])
 
@@ -173,12 +315,12 @@ export default function AdminBooks() {
     fetchBooks()
   }, [fetchBooks])
 
-  // Debounce search input - only trigger API after 300ms of inactivity
+  // Debounce search input - only trigger API after 400ms of inactivity
   useEffect(() => {
     const timer = setTimeout(() => {
       setSearch(searchInput)
       setPage(1)
-    }, 300)
+    }, 400)
     return () => clearTimeout(timer)
   }, [searchInput])
 
@@ -244,7 +386,9 @@ export default function AdminBooks() {
     try {
       const res = await fetch(`/api/books/isbn-lookup?isbn=${encodeURIComponent(form.isbn)}`)
       if (!res.ok) {
-        toast.error(t.admin.importError)
+        const data = await res.json()
+        // Show specific error message (ISBN validation, not found, etc.)
+        toast.error(data.error || t.admin.importError)
         return
       }
       const data = await res.json()
@@ -261,6 +405,10 @@ export default function AdminBooks() {
         publishDate: book.publishDate || prev.publishDate,
         categorySlug: book.suggestedCategorySlug || prev.categorySlug,
       }))
+      // Show warning if any
+      if (data.warning) {
+        toast.warning(data.warning)
+      }
       toast.success(t.admin.autoFill)
     } catch {
       toast.error(t.admin.importError)
@@ -417,121 +565,40 @@ export default function AdminBooks() {
                 <Skeleton key={i} className="h-14 w-full" />
               ))}
             </div>
+          ) : refreshing ? (
+            <div className="relative">
+              <div className="absolute inset-0 bg-white/60 z-10 flex items-center justify-center">
+                <Loader2 className="w-6 h-6 text-amber-500 animate-spin" />
+              </div>
+              <BooksTable
+                books={books}
+                t={t}
+                onEdit={openEditBook}
+                onDelete={(book) => { setSelectedBook(book); setDeleteOpen(true) }}
+                onTogglePublish={togglePublish}
+                total={total}
+                page={page}
+                totalPages={totalPages}
+                onPageChange={setPage}
+              />
+            </div>
           ) : books.length === 0 ? (
             <div className="py-12 text-center">
               <BookOpen className="w-10 h-10 text-slate-300 mx-auto mb-3" />
               <p className="text-slate-400">{t.admin.noBooks}</p>
             </div>
           ) : (
-            <>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-12"></TableHead>
-                      <TableHead>{t.book.title}</TableHead>
-                      <TableHead className="hidden md:table-cell">{t.book.author}</TableHead>
-                      <TableHead className="hidden lg:table-cell">ISBN</TableHead>
-                      <TableHead>{t.book.price}</TableHead>
-                      <TableHead>{t.common.status}</TableHead>
-                      <TableHead className="text-right">{t.common.actions}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {books.map((book) => (
-                      <TableRow key={book.id}>
-                        <TableCell>
-                          {book.coverUrl ? (
-                            <img
-                              src={book.coverUrl}
-                              alt={book.title}
-                              className="w-8 h-11 object-cover rounded shadow-sm"
-                            />
-                          ) : (
-                            <div className="w-8 h-11 bg-slate-100 rounded flex items-center justify-center">
-                              <BookOpen className="w-3 h-3 text-slate-400" />
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <div className="max-w-[200px] truncate font-medium text-sm">{book.title}</div>
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell text-sm text-slate-600">
-                          <div className="max-w-[150px] truncate">{book.author}</div>
-                        </TableCell>
-                        <TableCell className="hidden lg:table-cell font-mono text-xs text-slate-500">
-                          {book.isbn}
-                        </TableCell>
-                        <TableCell className="text-sm font-medium">
-                          {book.priceSale ? `${book.priceSale} ${t.common.da}` : '-'}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            {book.isPublished && (
-                              <Badge className="bg-green-100 text-green-700 text-[10px]">{t.admin.published}</Badge>
-                            )}
-                            {book.isDraft && (
-                              <Badge className="bg-yellow-100 text-yellow-700 text-[10px]">{t.admin.draft}</Badge>
-                            )}
-                            {!book.isAvailable && (
-                              <Badge className="bg-red-100 text-red-700 text-[10px]">{t.book.unavailable}</Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => togglePublish(book)}
-                              title={book.isPublished ? t.admin.unpublish : t.admin.publish}
-                            >
-                              {book.isPublished ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                            </Button>
-                            <Button variant="ghost" size="icon" onClick={() => openEditBook(book)}>
-                              <Pencil className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => { setSelectedBook(book); setDeleteOpen(true) }}
-                              className="text-red-500 hover:text-red-600"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              {/* Pagination */}
-              <div className="flex items-center justify-between px-4 py-3 border-t">
-                <p className="text-xs text-slate-500">
-                  {t.common.showing} {books.length} {t.common.of} {total}
-                </p>
-                <div className="flex gap-1">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    disabled={page <= 1}
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    disabled={page >= totalPages}
-                    onClick={() => setPage((p) => p + 1)}
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            </>
+            <BooksTable
+              books={books}
+              t={t}
+              onEdit={openEditBook}
+              onDelete={(book) => { setSelectedBook(book); setDeleteOpen(true) }}
+              onTogglePublish={togglePublish}
+              total={total}
+              page={page}
+              totalPages={totalPages}
+              onPageChange={setPage}
+            />
           )}
         </CardContent>
       </Card>

@@ -98,14 +98,17 @@ export default function AdminImport() {
     setLookupError('')
     try {
       const res = await fetch(`/api/books/isbn-lookup?isbn=${encodeURIComponent(isbn)}`)
+      const data = await res.json()
       if (!res.ok) {
-        const data = await res.json()
+        // Show specific error (ISBN validation, not found, etc.)
         setLookupError(data.error || 'Book not found')
         return
       }
-      const data = await res.json()
       setLookupResult(data.book)
       setCategorySlug(data.book.suggestedCategorySlug || '')
+      if (data.warning) {
+        toast.warning(data.warning)
+      }
     } catch {
       setLookupError('Network error')
     } finally {
