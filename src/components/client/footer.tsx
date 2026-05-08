@@ -113,10 +113,16 @@ export function Footer() {
         </div>
 
         {/* Bottom Bar */}
-        <div className="mt-12 pt-6 border-t border-white/10">
-          <p className="text-center text-xs text-white/50">
+        <div className="mt-12 pt-6 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <p className="text-xs text-white/50">
             © {new Date().getFullYear()} Kitabi. {t('footer.rights')}.
           </p>
+          <button
+            onClick={() => navigate('adminLogin')}
+            className="text-xs text-white/30 hover:text-gold/60 transition-colors"
+          >
+            Administration
+          </button>
         </div>
       </div>
     </footer>

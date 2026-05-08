@@ -1434,9 +1434,16 @@ export function t(key: TranslationKey | string, lang: Language): string {
 export function useTranslation() {
   const { language } = useLanguageStore()
 
-  const translate = (key: TranslationKey | string): string => {
+  const currentTranslations = translations[language]
+
+  // Create a function that also has all translation sections as properties
+  // This supports both t('nav.home') (function call) and t.admin.loginTitle (property access)
+  const translate = ((key: TranslationKey | string): string => {
     return t(key, language)
-  }
+  }) as TranslationKeys & ((key: TranslationKey | string) => string)
+
+  // Copy all translation sections to the function object
+  Object.assign(translate, currentTranslations)
 
   return { t: translate, language, isRTL: language === 'ar' }
 }
