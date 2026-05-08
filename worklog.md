@@ -1,23 +1,20 @@
 ---
-Task ID: 1
+Task ID: 2
 Agent: Main Agent
-Task: Fix book management issues in Kitabi admin panel
+Task: Fix lag/infinite re-render issue in admin book management and categories
 
 Work Log:
-- Explored full project structure and identified all bugs in book management
-- Fixed GET /api/books status filter: added support for isPublished and isDraft query params
-- Fixed admin-import.tsx: changed useState to useEffect for category loading
-- Fixed admin-import.tsx: corrected bulk import results parsing (API returns {imported, duplicates, notFound, errors} not {results})
-- Added i18n keys (bulkImport, isbnListLabel, importAll) in FR/AR/EN
-- Replaced hardcoded English strings in admin-import with translation keys
-- Cleaned up test data from database
-- Verified build succeeds
-- Tested all CRUD operations (create, read, update, delete) via API
-- Tested status filtering (published/draft/all) works correctly
-- Tested search functionality works correctly
+- Identified ROOT CAUSE: useTranslation() hook created a new `t` object on every render
+- This caused infinite re-render loop: render → new t → new useCallback → useEffect triggers → fetch → setState → re-render → ...
+- Fixed useTranslation() by adding useMemo to memoize the translate function based on language
+- Also used useLanguageStore selector (s) => s.language to avoid unnecessary re-renders from store
+- Removed `t` from useCallback dependency arrays in admin-books.tsx and admin-categories.tsx
+- Added debounce (300ms) on search input in admin-books to prevent API spam on every keystroke
+- Added proper error handling (check res.ok) in fetch callbacks
+- Verified build succeeds and APIs work correctly
 
 Stage Summary:
-- Book management API now properly filters by isPublished/isDraft status
-- Bulk ISBN import results table now displays correctly
-- Categories dropdown in import page loads properly
-- All text is now translatable (FR/AR/EN)
+- CRITICAL FIX: Infinite re-render loop eliminated by memoizing useTranslation()
+- Search is now debounced (300ms) to prevent excessive API calls
+- Categories page no longer has infinite re-render issue
+- Book management page loads smoothly without lag

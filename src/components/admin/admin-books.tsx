@@ -96,6 +96,7 @@ export default function AdminBooks() {
   const [books, setBooks] = useState<Book[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
+  const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [page, setPage] = useState(1)
@@ -145,20 +146,22 @@ export default function AdminBooks() {
         params.set('isDraft', 'true')
       }
       const res = await fetch(`/api/books?${params}`, { headers: getAuthHeaders() })
+      if (!res.ok) throw new Error('Fetch failed')
       const data = await res.json()
       setBooks(data.books || [])
       setTotalPages(data.pagination?.totalPages || 1)
       setTotal(data.pagination?.total || 0)
     } catch {
-      toast.error(t.common.error)
+      toast.error('Erreur')
     } finally {
       setLoading(false)
     }
-  }, [page, search, statusFilter, t])
+  }, [page, search, statusFilter])
 
   const fetchCategories = useCallback(async () => {
     try {
       const res = await fetch('/api/categories')
+      if (!res.ok) return
       const data = await res.json()
       setCategories(data.categories || [])
     } catch {
@@ -169,6 +172,15 @@ export default function AdminBooks() {
   useEffect(() => {
     fetchBooks()
   }, [fetchBooks])
+
+  // Debounce search input - only trigger API after 300ms of inactivity
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(searchInput)
+      setPage(1)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchInput])
 
   useEffect(() => {
     fetchCategories()
@@ -374,8 +386,8 @@ export default function AdminBooks() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <Input
                 placeholder={t.admin.searchBooks}
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 className="pl-9"
               />
             </div>

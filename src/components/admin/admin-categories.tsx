@@ -76,14 +76,15 @@ export default function AdminCategories() {
     setLoading(true)
     try {
       const res = await fetch('/api/categories')
+      if (!res.ok) throw new Error('Fetch failed')
       const data = await res.json()
       setCategories(data.categories || [])
     } catch {
-      toast.error(t.common.error)
+      toast.error('Erreur')
     } finally {
       setLoading(false)
     }
-  }, [t])
+  }, [])
 
   useEffect(() => {
     fetchCategories()
