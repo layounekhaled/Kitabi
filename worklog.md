@@ -1,25 +1,24 @@
 ---
 Task ID: 1
-Agent: Main Agent
-Task: Add more ISBN data sources to improve book discovery rates (was 17/50 not found)
+Agent: main
+Task: Add new ISBN lookup sources and improve genre/category extraction
 
 Work Log:
-- Read and analyzed current /src/lib/isbn-lookup.ts (8 sources, sequential cascade)
-- Tested all APIs directly to identify which ones work for the previously unfound ISBNs
-- Discovered OCLC Classify API is deprecated/returns 404 - replaced with Google Books Enhanced Search
-- Added Internet Archive source with spam filtering
-- Added Google Books Enhanced Search (tries ISBN+prefix, hyphenated ISBN, and raw number searches)
-- Added Web Search fallback using z-ai-web-dev-sdk (searches entire web + AI extraction)
-- Added ISBN-10 variants for OL Direct and OL Search in Phase 2
-- Refactored from sequential cascade to two-phase parallel fetching
-- Added cross-source metadata enrichment (fills missing fields from other sources)
-- Added cover enrichment from Open Library Covers API + Google Books thumbnail
+- Read and analyzed the full isbn-lookup.ts file (2400+ lines, 11 existing sources + web search)
+- Added Source 11: WorldCat Classify API (OCLC) - world's largest library catalog, free, no auth
+- Added Source 12: DNB SRU API (Deutsche Nationalbibliothek) - excellent international coverage, MARC21 XML parsing
+- Added Source 13: SUDOC (Système Universitaire de Documentation) - French university library catalog with UNIMARC XML parsing
+- Added Source 14: Inventaire.io - open-source book database, good for French books, Wikidata-style entities
+- Improved BNF source: now extracts dc:subject fields as categories (was returning empty [])
+- Improved Wikidata source: added genre (P136) to SPARQL queries, now returns genreLabel as categories
+- Improved Web Search AI prompt: now requests categories/genre field in extraction
+- Updated lookupISBN() Phase 2 to include all 4 new sources (worldcat, sudoc, dnb, inventaire)
+- Updated resultScore() to include new source bonuses
+- Updated file header comments to reflect 15 total sources
 
 Stage Summary:
-- Major architecture improvement: sequential -> parallel (3-phase) lookup
-- 11 sources total (was 8): added Internet Archive, Google Books Enhanced, Web Search
-- OCLC Classify replaced (API was dead)
-- Cross-source metadata enrichment (fills gaps from other sources)
-- Cover enrichment from Open Library Covers API
-- Web search + AI extraction as last resort for books not in any API
-- Very niche Arabic books remain unfound - they don't exist in any public database
+- Total sources: 15 (from 11 + web search)
+- New API sources: WorldCat, DNB, SUDOC, Inventaire
+- Genre/category extraction improved across BNF, Wikidata, and Web Search
+- TypeScript compilation passes with no new errors
+- Next.js build succeeds

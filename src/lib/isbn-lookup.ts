@@ -9,7 +9,11 @@
 // 8. Internet Archive (good for rare/older books, global coverage)
 // 9. Google Books Enhanced Search (different query strategies)
 // 10. Google Books broader search (fallback with less strict matching)
-// 11. Web Search (z-ai-web-dev-sdk) - last resort, searches the entire web
+// 11. WorldCat Classify API (OCLC - world's largest library catalog)
+// 12. DNB SRU API (Deutsche Nationalbibliothek - good international coverage)
+// 13. SUDOC (French university library catalog - excellent for French books)
+// 14. Inventaire.io (open-source book database, good for French books)
+// 15. Web Search (z-ai-web-dev-sdk) - last resort, searches the entire web
 //
 // Strategy: Three-phase parallel lookup.
 // Phase 1: Fast sources (Google Books + Open Library) - return immediately if cover found
@@ -657,6 +661,7 @@ async function lookupBNFByIsbn(searchIsbn: string, normalizedIsbn: string): Prom
   const languages = extractXmlFields(xml, 'dc:language')
   const descriptions = extractXmlFields(xml, 'dc:description')
   const formats = extractXmlFields(xml, 'dc:format')
+  const subjects = extractXmlFields(xml, 'dc:subject')
 
   if (titles.length === 0) return null
 
@@ -705,6 +710,11 @@ async function lookupBNFByIsbn(searchIsbn: string, normalizedIsbn: string): Prom
     }
   }
 
+  // Filter subjects to exclude barcode/technical info and get meaningful categories
+  const categories = subjects
+    .filter(s => !s.includes('Code à barres') && !s.includes('EAN') && s.length > 2 && s.length < 100)
+    .slice(0, 5)
+
   return {
     title,
     author,
@@ -715,7 +725,7 @@ async function lookupBNFByIsbn(searchIsbn: string, normalizedIsbn: string): Prom
     language,
     publishDate,
     isbn: normalizedIsbn,
-    categories: [],
+    categories,
     suggestedCategorySlug: suggestCategory(language),
     source: 'bnf',
   }
@@ -864,12 +874,13 @@ async function lookupWikidataByIsbn(searchIsbn: string, normalizedIsbn: string):
   // Wikidata stores ISBNs both with and without hyphens
   // Try the exact number first
   const sparqlQuery = `
-    SELECT ?item ?itemLabel ?itemDescription ?authorLabel ?publisherLabel ?publicationDate ?image WHERE {
+    SELECT ?item ?itemLabel ?itemDescription ?authorLabel ?publisherLabel ?publicationDate ?image ?genreLabel WHERE {
       ?item wdt:P212 "${searchIsbn}" .
       OPTIONAL { ?item wdt:P50 ?author . }
       OPTIONAL { ?item wdt:P123 ?publisher . }
       OPTIONAL { ?item wdt:P577 ?publicationDate . }
       OPTIONAL { ?item wdt:P18 ?image . }
+      OPTIONAL { ?item wdt:P136 ?genre . }
       SERVICE wikibase:label { bd:serviceParam wikibase:language "fr,en,ar,es,de" . }
     }
     LIMIT 1
@@ -885,12 +896,13 @@ async function lookupWikidataByIsbn(searchIsbn: string, normalizedIsbn: string):
   if (!bindings || bindings.length === 0) {
     // Also try P957 (ISBN-10 property)
     const sparqlQuery10 = `
-      SELECT ?item ?itemLabel ?itemDescription ?authorLabel ?publisherLabel ?publicationDate ?image WHERE {
+      SELECT ?item ?itemLabel ?itemDescription ?authorLabel ?publisherLabel ?publicationDate ?image ?genreLabel WHERE {
         ?item wdt:P957 "${searchIsbn}" .
         OPTIONAL { ?item wdt:P50 ?author . }
         OPTIONAL { ?item wdt:P123 ?publisher . }
         OPTIONAL { ?item wdt:P577 ?publicationDate . }
         OPTIONAL { ?item wdt:P18 ?image . }
+        OPTIONAL { ?item wdt:P136 ?genre . }
         SERVICE wikibase:label { bd:serviceParam wikibase:language "fr,en,ar,es,de" . }
       }
       LIMIT 1
@@ -939,6 +951,12 @@ function buildWikidataResult(binding: Record<string, { value?: string }>, normal
 
   const language = inferLanguageFromIsbn(normalizedIsbn)
 
+  // Extract genre/category from Wikidata
+  const categories: string[] = []
+  if (binding.genreLabel?.value) {
+    categories.push(binding.genreLabel.value)
+  }
+
   return {
     title,
     author,
@@ -949,7 +967,7 @@ function buildWikidataResult(binding: Record<string, { value?: string }>, normal
     language,
     publishDate,
     isbn: normalizedIsbn,
-    categories: [],
+    categories,
     suggestedCategorySlug: suggestCategory(language),
     source: 'wikidata',
   }
@@ -1190,7 +1208,676 @@ function hyphenateIsbn(isbn: string): string {
 }
 
 // ============================================================
-// Source 11: Web Search (z-ai-web-dev-sdk)
+// Source 11: WorldCat Classify API (OCLC)
+// World's largest library catalog. Free, no key needed for basic
+// ISBN classification lookup. Excellent for books in all languages.
+// ============================================================
+
+interface WorldCatClassifyRecord {
+  oclen?: string
+  isbn?: string[]
+  issn?: string[]
+  title?: string
+  author?: string
+  publisher?: string
+  date?: string
+  language?: string
+  edition?: string
+  holdings?: string
+  itemtype?: string
+  dewey?: string[]
+  lccn?: string[]
+  lccallnumber?: string[]
+  genre?: string[]
+}
+
+interface WorldCatClassifyResponse {
+  classify?: {
+    search?: {
+      totalResults?: string
+    }
+    works?: Array<{
+      title?: string
+      author?: string
+      owi?: string
+      editions?: string
+      holdings?: string
+      genre?: string[]
+    }>
+    records?: WorldCatClassifyRecord[]
+  }
+}
+
+async function lookupWorldCat(isbn: string): Promise<LookupResult | null> {
+  try {
+    const normalizedIsbn = normalizeIsbn(isbn)
+    const isbn10 = isbn13To10(normalizedIsbn)
+
+    // Try both ISBN-13 and ISBN-10
+    for (const variant of [normalizedIsbn, isbn10].filter(Boolean) as string[]) {
+      const result = await lookupWorldCatByIsbn(variant, normalizedIsbn)
+      if (result) return result
+    }
+
+    return null
+  } catch (error) {
+    console.error('WorldCat Classify API error:', error)
+    return null
+  }
+}
+
+async function lookupWorldCatByIsbn(searchIsbn: string, normalizedIsbn: string): Promise<LookupResult | null> {
+  const url = `https://classify.oclc.org/classify2/Classify?isbn=${encodeURIComponent(searchIsbn)}&maxRecs=3&summary=true`
+
+  const response = await fetch(url, {
+    headers: { 'Accept': 'application/json' },
+  })
+
+  if (!response.ok) return null
+
+  // WorldCat Classify returns XML by default, but we can request JSON
+  // Try JSON first, fall back to XML parsing
+  const contentType = response.headers.get('content-type') || ''
+  let data: WorldCatClassifyResponse
+
+  if (contentType.includes('json')) {
+    data = await response.json()
+  } else {
+    // Parse XML response
+    const xml = await response.text()
+
+    // Check if we have results
+    const totalMatch = xml.match(/<search[^>]*totalResults="(\d+)"[^>]*\/?>/i)
+    if (!totalMatch || parseInt(totalMatch[1]) === 0) return null
+
+    // Extract from <work> elements or <record> elements
+    return parseWorldCatXml(xml, normalizedIsbn)
+  }
+
+  if (!data.classify) return null
+
+  // Check search results
+  const totalResults = parseInt(data.classify.search?.totalResults || '0')
+  if (totalResults === 0) return null
+
+  // Try to get data from records first (more detailed)
+  if (data.classify.records && data.classify.records.length > 0) {
+    const record = data.classify.records[0]
+    return buildWorldCatResult(record, normalizedIsbn)
+  }
+
+  // Fall back to works (less detailed but has basic info)
+  if (data.classify.works && data.classify.works.length > 0) {
+    const work = data.classify.works[0]
+    return {
+      title: work.title || '',
+      author: work.author || '',
+      description: null,
+      coverUrl: null,
+      publisher: null,
+      pageCount: null,
+      language: inferLanguageFromIsbn(normalizedIsbn),
+      publishDate: null,
+      isbn: normalizedIsbn,
+      categories: work.genre || [],
+      suggestedCategorySlug: suggestCategory(inferLanguageFromIsbn(normalizedIsbn)),
+      source: 'worldcat',
+    }
+  }
+
+  return null
+}
+
+function parseWorldCatXml(xml: string, normalizedIsbn: string): LookupResult | null {
+  // Extract from <record> elements
+  const recordMatch = xml.match(/<record[^>]*>([\s\S]*?)<\/record>/i)
+  if (!recordMatch) {
+    // Try <work> elements
+    const workMatch = xml.match(/<work[^>]*title="([^"]*)"[^>]*author="([^"]*)"[^>]*\/?>/i)
+    if (workMatch) {
+      return {
+        title: workMatch[1] || '',
+        author: workMatch[2] || '',
+        description: null,
+        coverUrl: null,
+        publisher: null,
+        pageCount: null,
+        language: inferLanguageFromIsbn(normalizedIsbn),
+        publishDate: null,
+        isbn: normalizedIsbn,
+        categories: [],
+        suggestedCategorySlug: suggestCategory(inferLanguageFromIsbn(normalizedIsbn)),
+        source: 'worldcat',
+      }
+    }
+    return null
+  }
+
+  const recordXml = recordMatch[1]
+
+  const getAttr = (tag: string, attr: string): string | null => {
+    const m = recordXml.match(new RegExp(`<${tag}[^>]*${attr}="([^"]*)"[^>]*`, 'i'))
+    return m ? m[1] : null
+  }
+
+  const getTextContent = (tag: string): string | null => {
+    const m = recordXml.match(new RegExp(`<${tag}[^>]*>([^<]*)</${tag}>`, 'i'))
+    return m ? m[1].trim() : null
+  }
+
+  const title = getTextContent('title') || getAttr('title', 'value') || ''
+  const author = getTextContent('creator') || getAttr('creator', 'value') || ''
+  const publisher = getTextContent('publisher') || getAttr('publisher', 'value') || null
+  const date = getTextContent('date') || getAttr('date', 'value') || null
+  const language = getAttr('language', 'value') || null
+
+  // Extract genres/Dewey categories
+  const genres: string[] = []
+  const genreMatch = xml.match(/genre="([^"]*)"/g)
+  if (genreMatch) {
+    for (const g of genreMatch) {
+      const val = g.match(/genre="([^"]*)"/)
+      if (val && val[1]) genres.push(val[1])
+    }
+  }
+
+  const lang = language ? normalizeLanguage(language) : inferLanguageFromIsbn(normalizedIsbn)
+
+  return {
+    title,
+    author,
+    description: null,
+    coverUrl: null,
+    publisher,
+    pageCount: null,
+    language: lang,
+    publishDate: date,
+    isbn: normalizedIsbn,
+    categories: genres,
+    suggestedCategorySlug: suggestCategory(lang),
+    source: 'worldcat',
+  }
+}
+
+function buildWorldCatResult(record: WorldCatClassifyRecord, normalizedIsbn: string): LookupResult {
+  const language = record.language
+    ? normalizeLanguage(record.language)
+    : inferLanguageFromIsbn(normalizedIsbn)
+
+  return {
+    title: record.title || '',
+    author: record.author || '',
+    description: null,
+    coverUrl: null,
+    publisher: record.publisher || null,
+    pageCount: null,
+    language,
+    publishDate: record.date || null,
+    isbn: normalizedIsbn,
+    categories: record.genre || [],
+    suggestedCategorySlug: suggestCategory(language),
+    source: 'worldcat',
+  }
+}
+
+// ============================================================
+// Source 12: DNB SRU API (Deutsche Nationalbibliothek)
+// Free, no auth needed. Has excellent international coverage,
+// including many French books that other sources miss.
+// Returns MARC21 XML which we parse for book metadata.
+// ============================================================
+
+async function lookupDNB(isbn: string): Promise<LookupResult | null> {
+  try {
+    const normalizedIsbn = normalizeIsbn(isbn)
+    const isbn10 = isbn13To10(normalizedIsbn)
+
+    for (const variant of [normalizedIsbn, isbn10].filter(Boolean) as string[]) {
+      const result = await lookupDNBByIsbn(variant, normalizedIsbn)
+      if (result) return result
+    }
+
+    return null
+  } catch (error) {
+    console.error('DNB SRU API error:', error)
+    return null
+  }
+}
+
+async function lookupDNBByIsbn(searchIsbn: string, normalizedIsbn: string): Promise<LookupResult | null> {
+  const url = `https://services.dnb.de/sru/dnb?version=1.1&operation=searchRetrieve&query=ISBN=${encodeURIComponent(searchIsbn)}&recordSchema=MARC21-xml&maximumRecords=3`
+
+  const response = await fetch(url, {
+    headers: { 'Accept': 'application/xml' },
+  })
+
+  if (!response.ok) return null
+
+  const xml = await response.text()
+
+  // Check for results
+  const numMatch = xml.match(/<numberOfRecords>(\d+)<\/numberOfRecords>/)
+  if (!numMatch || parseInt(numMatch[1]) === 0) return null
+
+  // Parse MARC21 XML to extract book data
+  return parseDNBMarcXml(xml, normalizedIsbn)
+}
+
+function parseDNBMarcXml(xml: string, normalizedIsbn: string): LookupResult | null {
+  // Extract data from MARC21 fields
+  const getField = (tag: string, code?: string): string | null => {
+    if (code) {
+      const regex = new RegExp(`<datafield[^>]*tag="${tag}"[^>]*>[\\s\\S]*?<subfield[^>]*code="${code}"[^>]*>([^<]*)<`, 'i')
+      const match = xml.match(regex)
+      return match ? match[1].trim() : null
+    }
+    // Control field
+    const regex = new RegExp(`<controlfield[^>]*tag="${tag}"[^>]*>([^<]*)<`, 'i')
+    const match = xml.match(regex)
+    return match ? match[1].trim() : null
+  }
+
+  const getAllSubfields = (tag: string, code: string): string[] => {
+    const results: string[] = []
+    // Find all datafields with this tag
+    const fieldRegex = new RegExp(`<datafield[^>]*tag="${tag}"[^>]*>([\\s\\S]*?)</datafield>`, 'gi')
+    let fieldMatch
+    while ((fieldMatch = fieldRegex.exec(xml)) !== null) {
+      const subfieldRegex = new RegExp(`<subfield[^>]*code="${code}"[^>]*>([^<]*)<`, 'gi')
+      let subMatch
+      while ((subMatch = subfieldRegex.exec(fieldMatch[1])) !== null) {
+        if (subMatch[1].trim()) results.push(subMatch[1].trim())
+      }
+    }
+    return results
+  }
+
+  // Title (MARC 245 a,b)
+  const titleA = getField('245', 'a') || ''
+  const titleB = getField('245', 'b') || ''
+  let title = titleA.replace(/\s*[\\/:]\s*$/, '').trim()
+  if (titleB) {
+    title = `${title} : ${titleB.replace(/\s*[\\/:]\s*$/, '').trim()}`
+  }
+
+  if (!title) return null
+
+  // Author (MARC 100 a or 700 a)
+  let author = getField('100', 'a') || ''
+  if (!author) {
+    const authors700 = getAllSubfields('700', 'a')
+    author = authors700.join(', ')
+  }
+
+  // Publisher (MARC 264 b)
+  const publisher = getField('264', 'b')?.replace(/[,;:]\s*$/, '').trim() || null
+
+  // Date (MARC 264 c)
+  const publishDate = getField('264', 'c')?.replace(/[,;:.\s]+$/, '').trim() || null
+
+  // Language (MARC 008 or 041 a)
+  const lang041 = getField('041', 'a')
+  const language = lang041
+    ? normalizeLanguage(lang041)
+    : inferLanguageFromIsbn(normalizedIsbn)
+
+  // Page count (MARC 300 a)
+  const pages300 = getField('300', 'a')
+  let pageCount: number | null = null
+  if (pages300) {
+    const pageMatch = pages300.match(/(\d+)\s*(?:S\.|p\.|pages?)/i)
+    if (pageMatch) pageCount = parseInt(pageMatch[1])
+  }
+
+  // Subjects/genres (MARC 650 a - topical terms, 655 a - genre/form)
+  const categories = [
+    ...getAllSubfields('650', 'a'),
+    ...getAllSubfields('655', 'a'),
+  ].slice(0, 5)
+
+  // Description (MARC 520 a)
+  const description = getField('520', 'a') || null
+
+  return {
+    title,
+    author,
+    description,
+    coverUrl: null,
+    publisher,
+    pageCount,
+    language,
+    publishDate,
+    isbn: normalizedIsbn,
+    categories,
+    suggestedCategorySlug: suggestCategory(language),
+    source: 'dnb',
+  }
+}
+
+// ============================================================
+// Source 13: SUDOC (Système Universitaire de Documentation)
+// French university library catalog. Free, no auth needed.
+// Excellent for French academic and trade books that BNF misses.
+// ============================================================
+
+async function lookupSUDOC(isbn: string): Promise<LookupResult | null> {
+  try {
+    const normalizedIsbn = normalizeIsbn(isbn)
+    const isbn10 = isbn13To10(normalizedIsbn)
+
+    for (const variant of [normalizedIsbn, isbn10].filter(Boolean) as string[]) {
+      const result = await lookupSUDOCByIsbn(variant, normalizedIsbn)
+      if (result) return result
+    }
+
+    return null
+  } catch (error) {
+    console.error('SUDOC API error:', error)
+    return null
+  }
+}
+
+async function lookupSUDOCByIsbn(searchIsbn: string, normalizedIsbn: string): Promise<LookupResult | null> {
+  // SUDOC multi-where API returns PPN identifiers for an ISBN
+  const whereUrl = `https://www.sudoc.abes.fr/services/isbn2ppn/${encodeURIComponent(searchIsbn)}&format=text/json`
+
+  const whereResponse = await fetch(whereUrl, {
+    headers: { 'Accept': 'application/json' },
+  })
+
+  if (!whereResponse.ok) return null
+
+  let ppnData: any
+  try {
+    ppnData = await whereResponse.json()
+  } catch {
+    // SUDOC sometimes returns XML even when requesting JSON
+    const text = await whereResponse.text()
+    const ppnMatch = text.match(/<ppn>(\d+)<\/ppn>/)
+    if (!ppnMatch) return null
+    // Fetch record details by PPN
+    return await lookupSUDOCByPPN(ppnMatch[1], normalizedIsbn)
+  }
+
+  // Extract PPN from JSON response
+  const ppn = ppnData?.sudoc?.ppn || ppnData?.ppn
+  if (!ppn) return null
+
+  return await lookupSUDOCByPPN(ppn, normalizedIsbn)
+}
+
+async function lookupSUDOCByPPN(ppn: string, normalizedIsbn: string): Promise<LookupResult | null> {
+  // Fetch the full record in JSON-LD format
+  const recordUrl = `https://www.sudoc.abes.fr/services/PPN/${ppn}&format=text/json`
+
+  const recordResponse = await fetch(recordUrl, {
+    headers: { 'Accept': 'application/json' },
+  })
+
+  if (!recordResponse.ok) return null
+
+  let xml: string
+  try {
+    // SUDOC record API often returns XML
+    xml = await recordResponse.text()
+  } catch {
+    return null
+  }
+
+  return parseSUDOCXml(xml, normalizedIsbn)
+}
+
+function parseSUDOCXml(xml: string, normalizedIsbn: string): LookupResult | null {
+  // SUDOC returns UNIMARC XML
+  const getField = (tag: string, code: string): string | null => {
+    const regex = new RegExp(`<datafield[^>]*tag="${tag}"[^>]*>[\\s\\S]*?<subfield[^>]*code="${code}"[^>]*>([^<]*)<`, 'i')
+    const match = xml.match(regex)
+    return match ? match[1].trim() : null
+  }
+
+  const getAllSubfields = (tag: string, code: string): string[] => {
+    const results: string[] = []
+    const fieldRegex = new RegExp(`<datafield[^>]*tag="${tag}"[^>]*>([\\s\\S]*?)</datafield>`, 'gi')
+    let fieldMatch
+    while ((fieldMatch = fieldRegex.exec(xml)) !== null) {
+      const subfieldRegex = new RegExp(`<subfield[^>]*code="${code}"[^>]*>([^<]*)<`, 'gi')
+      let subMatch
+      while ((subMatch = subfieldRegex.exec(fieldMatch[1])) !== null) {
+        if (subMatch[1].trim()) results.push(subMatch[1].trim())
+      }
+    }
+    return results
+  }
+
+  // Title (UNIMARC 200 a)
+  const title = getField('200', 'a')?.replace(/\s*[\\/:;]\s*$/, '').trim() || ''
+  if (!title) return null
+
+  // Author (UNIMARC 700 a or 701 a)
+  let author = getField('700', 'a') || ''
+  if (!author) {
+    const authors701 = getAllSubfields('701', 'a')
+    author = authors701.join(', ')
+  }
+
+  // Publisher (UNIMARC 210 c)
+  const publisher = getField('210', 'c')?.replace(/[,;:]\s*$/, '').trim() || null
+
+  // Date (UNIMARC 210 d)
+  const publishDate = getField('210', 'd')?.replace(/[,;:.\s]+$/, '').trim() || null
+
+  // Language (UNIMARC 101 a)
+  const langCode = getField('101', 'a')
+  const language = langCode ? normalizeLanguage(langCode) : inferLanguageFromIsbn(normalizedIsbn)
+
+  // Page count (UNIMARC 215 a)
+  const pages = getField('215', 'a')
+  let pageCount: number | null = null
+  if (pages) {
+    const pageMatch = pages.match(/(\d+)\s*(?:p\.|pages?)/i)
+    if (pageMatch) pageCount = parseInt(pageMatch[1])
+  }
+
+  // Subjects (UNIMARC 606 a - RAMEAU, 610 a - keywords)
+  const categories = [
+    ...getAllSubfields('606', 'a'),
+    ...getAllSubfields('610', 'a'),
+  ].slice(0, 5)
+
+  // Description (UNIMARC 330 a)
+  const description = getField('330', 'a') || null
+
+  return {
+    title,
+    author,
+    description,
+    coverUrl: null,
+    publisher,
+    pageCount,
+    language,
+    publishDate,
+    isbn: normalizedIsbn,
+    categories,
+    suggestedCategorySlug: suggestCategory(language),
+    source: 'sudoc',
+  }
+}
+
+// ============================================================
+// Source 14: Inventaire.io
+// Open-source book database, especially good for French books.
+// Free, no auth needed. Uses Wikidata-style entities.
+// ============================================================
+
+interface InventaireEntity {
+  uri?: string
+  label?: string
+  description?: string
+  claims?: {
+    'wdt:P50'?: string[]   // author
+    'wdt:P123'?: string[]  // publisher
+    'wdt:P577'?: string[]  // publication date
+    'wdt:P1104'?: number   // number of pages
+    'wdt:P407'?: string[]  // language of work
+    'wdt:P921'?: string[]  // main subject
+    'wdt:P136'?: string[]  // genre
+  }
+}
+
+async function lookupInventaire(isbn: string): Promise<LookupResult | null> {
+  try {
+    const normalizedIsbn = normalizeIsbn(isbn)
+    const isbn10 = isbn13To10(normalizedIsbn)
+
+    for (const variant of [normalizedIsbn, isbn10].filter(Boolean) as string[]) {
+      const result = await lookupInventaireByIsbn(variant, normalizedIsbn)
+      if (result) return result
+    }
+
+    return null
+  } catch (error) {
+    console.error('Inventaire API error:', error)
+    return null
+  }
+}
+
+async function lookupInventaireByIsbn(searchIsbn: string, normalizedIsbn: string): Promise<LookupResult | null> {
+  // Inventaire ISBN lookup - returns entity URI
+  const lookupUrl = `https://inventaire.io/api/data?action=by-uris&uris=isbn:${encodeURIComponent(searchIsbn)}`
+
+  const lookupResponse = await fetch(lookupUrl, {
+    headers: { 'Accept': 'application/json' },
+  })
+
+  if (!lookupResponse.ok) return null
+
+  const lookupData = await lookupResponse.json()
+  const entities = lookupData.entities as Record<string, InventaireEntity> | undefined
+  if (!entities) return null
+
+  // Find the first entity that has a label (title)
+  const entityKey = Object.keys(entities).find(k => entities[k].label)
+  if (!entityKey) return null
+
+  const entity = entities[entityKey]
+
+  // Get author details
+  let author = ''
+  if (entity.claims?.['wdt:P50']?.length) {
+    const authorUris = entity.claims['wdt:P50']
+    const authorNames: string[] = []
+    for (const authorUri of authorUris.slice(0, 3)) {
+      try {
+        const authorResp = await fetch(
+          `https://inventaire.io/api/data?action=by-uris&uris=${encodeURIComponent(authorUri)}`,
+          { headers: { 'Accept': 'application/json' } }
+        )
+        if (authorResp.ok) {
+          const authorData = await authorResp.json()
+          const authorEntities = authorData.entities as Record<string, InventaireEntity>
+          const authorKey = Object.keys(authorEntities)[0]
+          if (authorEntities[authorKey]?.label) {
+            authorNames.push(authorEntities[authorKey].label!)
+          }
+        }
+      } catch {
+        // Skip author lookup errors
+      }
+    }
+    author = authorNames.join(', ')
+  }
+
+  // Get publisher details
+  let publisher: string | null = null
+  if (entity.claims?.['wdt:P123']?.length) {
+    const pubUri = entity.claims['wdt:P123'][0]
+    try {
+      const pubResp = await fetch(
+        `https://inventaire.io/api/data?action=by-uris&uris=${encodeURIComponent(pubUri)}`,
+        { headers: { 'Accept': 'application/json' } }
+      )
+      if (pubResp.ok) {
+        const pubData = await pubResp.json()
+        const pubEntities = pubData.entities as Record<string, InventaireEntity>
+        const pubKey = Object.keys(pubEntities)[0]
+        publisher = pubEntities[pubKey]?.label || null
+      }
+    } catch {
+      // Skip publisher lookup errors
+    }
+  }
+
+  // Publication date
+  let publishDate: string | null = null
+  if (entity.claims?.['wdt:P577']?.length) {
+    const dateStr = entity.claims['wdt:P577'][0]
+    const dateMatch = dateStr.match(/^(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?/)
+    if (dateMatch) {
+      publishDate = [dateMatch[1], dateMatch[2], dateMatch[3]].filter(Boolean).join('-')
+    }
+  }
+
+  // Language
+  let language = inferLanguageFromIsbn(normalizedIsbn)
+  if (entity.claims?.['wdt:P407']?.length) {
+    const langUri = entity.claims['wdt:P407'][0]
+    // Map Wikidata language entities
+    const langMap: Record<string, string> = {
+      'Q150': 'fr', 'Q1860': 'en', 'Q13955': 'ar',
+      'Q1321': 'es', 'Q188': 'de', 'Q652': 'it',
+    }
+    const langId = langUri.replace('wd:', '')
+    if (langMap[langId]) language = langMap[langId]
+  }
+
+  // Subjects & genres
+  const categories: string[] = []
+  if (entity.claims?.['wdt:P136']?.length) {
+    for (const genreUri of entity.claims['wdt:P136'].slice(0, 3)) {
+      try {
+        const genreResp = await fetch(
+          `https://inventaire.io/api/data?action=by-uris&uris=${encodeURIComponent(genreUri)}`,
+          { headers: { 'Accept': 'application/json' } }
+        )
+        if (genreResp.ok) {
+          const genreData = await genreResp.json()
+          const genreEntities = genreData.entities as Record<string, InventaireEntity>
+          const genreKey = Object.keys(genreEntities)[0]
+          if (genreEntities[genreKey]?.label) {
+            categories.push(genreEntities[genreKey].label!)
+          }
+        }
+      } catch {
+        // Skip genre lookup errors
+      }
+    }
+  }
+
+  // Try to get cover from Inventaire
+  let coverUrl: string | null = null
+  const invId = entityKey.replace('inv:', '')
+  if (invId) {
+    coverUrl = `https://inventaire.io/img/entities/${invId}?width=400`
+  }
+
+  return {
+    title: entity.label || '',
+    author,
+    description: entity.description || null,
+    coverUrl,
+    publisher,
+    pageCount: entity.claims?.['wdt:P1104'] || null,
+    language,
+    publishDate,
+    isbn: normalizedIsbn,
+    categories,
+    suggestedCategorySlug: suggestCategory(language),
+    source: 'inventaire',
+  }
+}
+
+// ============================================================
+// Source 15: Web Search (z-ai-web-dev-sdk)
 // Last resort: search the entire web for the ISBN.
 // Can find books from retailer sites, publisher pages, blogs, etc.
 // Uses AI to extract structured book data from search results.
@@ -1302,12 +1989,14 @@ async function lookupWebSearch(isbn: string): Promise<LookupResult | null> {
 - "language": "fr"|"en"|"ar" or null
 - "publishDate": string or null (YYYY or YYYY-MM-DD)
 - "pageCount": number or null
+- "categories": string[] or null (genres/subjects, e.g. ["Fiction", "Roman", "Science"])
 
 Important rules:
 - Return ONLY the JSON object, no markdown fences, no explanation
 - If you cannot confidently identify the SPECIFIC book for this ISBN, return {"title": null}
 - Do NOT guess - only extract information that is clearly present in the search results
-- The ISBN is ${normalizedIsbn}, make sure the extracted data is for THIS specific ISBN`,
+- The ISBN is ${normalizedIsbn}, make sure the extracted data is for THIS specific ISBN
+- Include genre/category/subject information when available (e.g. "Roman", "Fiction", "Science-fiction", "Histoire", etc.)`,
         },
         {
           role: 'user',
@@ -1339,6 +2028,11 @@ Important rules:
 
     const language = normalizeLanguage(bookData.language as string) || inferLanguageFromIsbn(normalizedIsbn)
 
+    // Extract categories from AI response
+    const categories = Array.isArray(bookData.categories)
+      ? (bookData.categories as string[]).filter((c): c is string => typeof c === 'string')
+      : []
+
     return {
       title: bookData.title as string,
       author: (bookData.author as string) || '',
@@ -1349,7 +2043,7 @@ Important rules:
       language,
       publishDate: (bookData.publishDate as string) || null,
       isbn: normalizedIsbn,
-      categories: [],
+      categories,
       suggestedCategorySlug: suggestCategory(language),
       source: 'web-search',
     }
@@ -1506,6 +2200,10 @@ function resultScore(result: LookupResult): number {
     'openlibrary-search': 2,
     'crossref': 2,
     'bnf': 2,
+    'worldcat': 2,
+    'sudoc': 2,
+    'dnb': 2,
+    'inventaire': 2,
     'wikidata': 1,
     'internet-archive': 1,
     'google-enhanced': 1,
@@ -1645,6 +2343,10 @@ export async function lookupISBN(isbn: string): Promise<{
     { name: 'google-enhanced', fn: () => lookupGoogleBooksEnhanced(normalizedIsbn) },
     { name: 'openlibrary-direct-10', fn: () => isbn10 ? lookupOpenLibraryDirect(isbn10) : Promise.resolve(null) },
     { name: 'openlibrary-search-10', fn: () => isbn10 ? lookupOpenLibrarySearch(isbn10) : Promise.resolve(null) },
+    { name: 'worldcat', fn: () => lookupWorldCat(normalizedIsbn) },
+    { name: 'sudoc', fn: () => lookupSUDOC(normalizedIsbn) },
+    { name: 'dnb', fn: () => lookupDNB(normalizedIsbn) },
+    { name: 'inventaire', fn: () => lookupInventaire(normalizedIsbn) },
     { name: 'wikidata', fn: () => lookupWikidata(normalizedIsbn) },
     { name: 'google-broad', fn: () => lookupGoogleBooksBroad(normalizedIsbn) },
   ]
