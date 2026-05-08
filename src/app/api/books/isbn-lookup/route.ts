@@ -17,11 +17,15 @@ export async function GET(request: NextRequest) {
     // Clean ISBN - remove dashes and spaces
     const cleanIsbn = isbn.replace(/[-\s]/g, '')
 
-    // Use the shared lookup function which validates the ISBN and checks for matches
-    const { result, warning } = await lookupISBN(cleanIsbn)
+    // Use the shared lookup function with a 25s timeout
+    const lookupPromise = lookupISBN(cleanIsbn)
+    const timeoutPromise = new Promise<{ result: null; warning?: string }>((resolve) => {
+      setTimeout(() => resolve({ result: null, warning: 'Recherche expirée (délai de 25s dépassé)' }), 25000)
+    })
+
+    const { result, warning } = await Promise.race([lookupPromise, timeoutPromise])
 
     if (!result) {
-      // If we got a warning (like invalid ISBN with suggestion), show it as the error
       if (warning) {
         return NextResponse.json(
           { error: warning, isbn: cleanIsbn },
