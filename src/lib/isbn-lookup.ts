@@ -6,10 +6,17 @@
 // 5. BNF - Bibliothèque Nationale de France (excellent for French books)
 // 6. Crossref API (excellent for English/academic/trade books)
 // 7. Wikidata SPARQL (good for notable books)
-// 8. Google Books broader search (fallback with less strict matching)
+// 8. Internet Archive (good for rare/older books, global coverage)
+// 9. Google Books Enhanced Search (different query strategies)
+// 10. Google Books broader search (fallback with less strict matching)
+// 11. Web Search (z-ai-web-dev-sdk) - last resort, searches the entire web
 //
-// Strategy: Sequential cascade through all sources.
-// Each source uses fetch() 
+// Strategy: Three-phase parallel lookup.
+// Phase 1: Fast sources (Google Books + Open Library) - return immediately if cover found
+// Phase 2: All remaining API sources in parallel - return best result
+// Phase 3: Web search fallback (only if all APIs fail) - searches entire web
+// Plus: Cross-source cover & metadata enrichment
+// Each source uses fetch() with individual timeouts 
 
 // ============================================================
 // Types
@@ -106,6 +113,28 @@ interface CrossrefResponse {
   message?: {
     items?: CrossrefWorkItem[]
     'total-results'?: number
+  }
+}
+
+interface IADoc {
+  title?: string
+  creator?: string
+  publisher?: string[]
+  date?: string
+  language?: string | string[]
+  description?: string | string[]
+  identifier?: string
+  isbn?: string[]
+  coverImage?: string
+}
+
+interface IAResponse {
+  responseHeader?: {
+    status?: number
+  }
+  response?: {
+    numFound?: number
+    docs?: IADoc[]
   }
 }
 
@@ -977,6 +1006,455 @@ async function lookupGoogleBooksBroad(isbn: string): Promise<LookupResult | null
 }
 
 // ============================================================
+// Source 9: Internet Archive
+// Free, no auth required. Good for rare and older books.
+// Advanced Search API returns JSON.
+// ============================================================
+
+async function lookupInternetArchive(isbn: string): Promise<LookupResult | null> {
+  try {
+    const normalizedIsbn = normalizeIsbn(isbn)
+    const isbn10 = isbn13To10(normalizedIsbn)
+
+    // Try both ISBN-13 and ISBN-10
+    for (const variant of [normalizedIsbn, isbn10].filter(Boolean) as string[]) {
+      const result = await lookupIAByIsbn(variant, normalizedIsbn)
+      if (result) return result
+    }
+
+    return null
+  } catch (error) {
+    console.error('Internet Archive API error:', error)
+    return null
+  }
+}
+
+// Internet Archive spam titles that are not real books
+const IA_SPAM_PATTERNS = [
+  'donation from better world books',
+  'pallets from bwb',
+  'donation from bwb',
+  'better world books',
+  'bwb donation',
+  'bwb pallet',
+]
+
+async function lookupIAByIsbn(searchIsbn: string, normalizedIsbn: string): Promise<LookupResult | null> {
+  const url = `https://archive.org/advancedsearch.php?q=isbn%3A${encodeURIComponent(searchIsbn)}&fl[]=title&fl[]=creator&fl[]=publisher&fl[]=date&fl[]=language&fl[]=description&fl[]=identifier&fl[]=coverImage&output=json&rows=10`
+
+  const response = await fetch(url, {
+    headers: { 'Accept': 'application/json' },
+  })
+
+  if (!response.ok) return null
+
+  const data = await response.json() as IAResponse
+  if (!data.response?.docs || data.response.docs.length === 0) return null
+
+  // Filter out spam/non-book entries and find the first real book
+  const doc = data.response.docs.find(d => {
+    if (!d.title) return false
+    const lowerTitle = d.title.toLowerCase()
+    // Skip spam entries
+    if (IA_SPAM_PATTERNS.some(pattern => lowerTitle.includes(pattern))) return false
+    // Skip entries with no useful metadata at all
+    if (!d.creator && !d.publisher && !d.date) return false
+    return true
+  }) || data.response.docs.find(d => d.title && !IA_SPAM_PATTERNS.some(p => d.title!.toLowerCase().includes(p)))
+
+  if (!doc || !doc.title) return null
+
+  // Build cover URL from Internet Archive identifier
+  let coverUrl: string | null = null
+  if (doc.identifier) {
+    coverUrl = `https://archive.org/services/img/${doc.identifier}`
+  }
+
+  // Description can be an array
+  let description: string | null = null
+  if (doc.description) {
+    description = Array.isArray(doc.description) ? doc.description[0] : doc.description
+    // Strip HTML tags from description
+    if (description) description = description.replace(/<[^>]+>/g, '').trim()
+  }
+
+  // Language can be an array
+  let language = inferLanguageFromIsbn(normalizedIsbn)
+  if (doc.language) {
+    const langCode = Array.isArray(doc.language) ? doc.language[0] : doc.language
+    language = normalizeLanguage(langCode)
+  }
+
+  // Publisher can be an array
+  const publisher = Array.isArray(doc.publisher) ? doc.publisher[0] : (doc.publisher || null)
+
+  return {
+    title: doc.title,
+    author: doc.creator || '',
+    description,
+    coverUrl,
+    publisher,
+    pageCount: null,
+    language,
+    publishDate: doc.date || null,
+    isbn: normalizedIsbn,
+    categories: [],
+    suggestedCategorySlug: suggestCategory(language),
+    source: 'internet-archive',
+  }
+}
+
+// ============================================================
+// Source 10: Google Books Enhanced Search
+// Tries different query strategies to find books that the
+// standard isbn: query misses. Some books have the ISBN in
+// their metadata but aren't indexed by the isbn: search operator.
+// ============================================================
+
+async function lookupGoogleBooksEnhanced(isbn: string): Promise<LookupResult | null> {
+  try {
+    const normalizedIsbn = normalizeIsbn(isbn)
+    const isbn10 = isbn13To10(normalizedIsbn)
+    const variants = [normalizedIsbn, isbn10].filter(Boolean) as string[]
+
+    // Strategy 1: Search with "ISBN" prefix (matches books where ISBN is in description)
+    for (const variant of variants) {
+      const result = await lookupGBEnhancedQuery(`ISBN+${variant}`, normalizedIsbn)
+      if (result) return result
+    }
+
+    // Strategy 2: Search with hyphenated ISBN format
+    for (const variant of variants) {
+      const hyphenated = hyphenateIsbn(variant)
+      if (hyphenated !== variant) {
+        const result = await lookupGBEnhancedQuery(hyphenated, normalizedIsbn)
+        if (result) return result
+      }
+    }
+
+    // Strategy 3: Search by the raw ISBN number (matches title/description)
+    for (const variant of variants) {
+      const result = await lookupGBEnhancedQuery(variant, normalizedIsbn)
+      if (result) return result
+    }
+
+    return null
+  } catch (error) {
+    console.error('Google Books Enhanced error:', error)
+    return null
+  }
+}
+
+async function lookupGBEnhancedQuery(query: string, normalizedIsbn: string): Promise<LookupResult | null> {
+  const response = await fetch(
+    `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=5`,
+  )
+  if (!response.ok) return null
+  const data = await response.json()
+  if (!data.items || data.items.length === 0) return null
+
+  for (const item of data.items) {
+    const volumeInfo = item.volumeInfo
+
+    // Verify the result actually matches our ISBN
+    if (volumeInfo.industryIdentifiers) {
+      for (const id of volumeInfo.industryIdentifiers) {
+        const idValue = id.identifier.replace(/[-\s]/g, '')
+        if (idValue === normalizedIsbn) {
+          return buildGoogleBooksResult(volumeInfo, normalizedIsbn)
+        }
+        if (id.type === 'ISBN_10' && idValue.length === 10) {
+          const as13 = isbn10To13(idValue)
+          if (as13 === normalizedIsbn) {
+            return buildGoogleBooksResult(volumeInfo, normalizedIsbn)
+          }
+        }
+      }
+    }
+  }
+
+  return null
+}
+
+/** Add standard ISBN hyphens for display/search purposes */
+function hyphenateIsbn(isbn: string): string {
+  if (isbn.length === 13) {
+    // EAN-13 hyphenation: 978-X-XXXX-XXXX-X
+    return `${isbn.slice(0, 3)}-${isbn.slice(3, 4)}-${isbn.slice(4, 8)}-${isbn.slice(8, 12)}-${isbn.slice(12)}`
+  }
+  if (isbn.length === 10) {
+    // ISBN-10 hyphenation: X-XXXX-XXXX-X
+    return `${isbn.slice(0, 1)}-${isbn.slice(1, 5)}-${isbn.slice(5, 9)}-${isbn.slice(9)}`
+  }
+  return isbn
+}
+
+// ============================================================
+// Source 11: Web Search (z-ai-web-dev-sdk)
+// Last resort: search the entire web for the ISBN.
+// Can find books from retailer sites, publisher pages, blogs, etc.
+// Uses AI to extract structured book data from search results.
+// ============================================================
+
+async function lookupWebSearch(isbn: string): Promise<LookupResult | null> {
+  try {
+    const normalizedIsbn = normalizeIsbn(isbn)
+    const isbn10 = isbn13To10(normalizedIsbn)
+
+    // Dynamic import to avoid issues if SDK is not available
+    let ZAI: any
+    try {
+      const mod = await import('z-ai-web-dev-sdk')
+      ZAI = mod.default || mod
+    } catch (importErr) {
+      console.error('[ISBN Lookup] z-ai-web-dev-sdk import failed:', (importErr as Error)?.message)
+      return null
+    }
+
+    const zai = await ZAI.create()
+
+    // Infer language from ISBN to craft better search queries
+    const inferredLang = inferLanguageFromIsbn(normalizedIsbn)
+    const langKeywords: Record<string, string> = {
+      'fr': 'livre auteur éditeur',
+      'en': 'book author publisher',
+      'ar': 'كتاب مؤلف ناشر',
+    }
+    const keyword = langKeywords[inferredLang] || 'book'
+
+    // Try multiple search queries
+    const queries = [
+      `"${normalizedIsbn}" ${keyword}`,
+      isbn10 ? `"${isbn10}" ${keyword}` : null,
+      `${normalizedIsbn} ${keyword}`,
+    ].filter(Boolean) as string[]
+
+    // Generic ISBN lookup sites to filter out (they don't contain book metadata)
+    const spamHosts = [
+      'isbnsearch.org', 'isbndb.com', 'isbn.nu', 'bookfinder.com',
+      'chasse-aux-livres.fr', 'booktrapper.com', 'isbnsearch.com',
+      'openisbn.com', 'isbnexplorer.com', 'findbooksearch.com',
+    ]
+
+    let bestSnippets = ''
+    let searchWorked = false
+
+    for (const query of queries) {
+      try {
+        const searchResults = await zai.functions.invoke('web_search', {
+          query,
+          num: 10,
+        })
+
+        if (!searchResults || !Array.isArray(searchResults) || searchResults.length === 0) continue
+
+        // Filter out generic ISBN lookup sites and collect meaningful snippets
+        const snippets = searchResults
+          .filter((r: { host_name?: string }) => {
+            const host = (r.host_name || '').toLowerCase()
+            return !spamHosts.some(spam => host.includes(spam))
+          })
+          .map((r: { name?: string; snippet?: string; url?: string }) => {
+            const parts: string[] = []
+            if (r.name) parts.push(r.name)
+            if (r.snippet) parts.push(r.snippet)
+            if (r.url) parts.push(`(source: ${r.url})`)
+            return parts.join(' | ')
+          })
+          .filter((s: string) => s.length > 20)
+
+        if (snippets.length > 0) {
+          const combined = snippets.join('\n')
+          // Prefer search results that actually mention the ISBN
+          if (combined.toLowerCase().includes(normalizedIsbn) ||
+              (isbn10 && combined.includes(isbn10))) {
+            bestSnippets = combined
+            searchWorked = true
+            break // Found good results, stop searching
+          }
+          // Otherwise keep the longest snippet set
+          if (combined.length > bestSnippets.length) {
+            bestSnippets = combined
+          }
+        }
+      } catch (searchErr) {
+        console.error('[ISBN Lookup] Web search query failed:', (searchErr as Error)?.message)
+      }
+    }
+
+    if (!bestSnippets || bestSnippets.length < 30) {
+      console.log(`[ISBN Lookup] Web search: no meaningful results found`)
+      return null
+    }
+
+    console.log(`[ISBN Lookup] Web search: found ${bestSnippets.length} chars of snippets`)
+
+    // Use AI to extract structured book data from search results
+    const completion = await zai.chat.completions.create({
+      messages: [
+        {
+          role: 'system',
+          content: `You are a book metadata extractor. Given web search results for a book identified by ISBN "${normalizedIsbn}", extract the book's metadata. Return ONLY a JSON object with these fields (use null for unknown fields):
+- "title": string (book title)
+- "author": string (author name(s))
+- "publisher": string or null
+- "description": string or null (brief description, max 300 chars)
+- "language": "fr"|"en"|"ar" or null
+- "publishDate": string or null (YYYY or YYYY-MM-DD)
+- "pageCount": number or null
+
+Important rules:
+- Return ONLY the JSON object, no markdown fences, no explanation
+- If you cannot confidently identify the SPECIFIC book for this ISBN, return {"title": null}
+- Do NOT guess - only extract information that is clearly present in the search results
+- The ISBN is ${normalizedIsbn}, make sure the extracted data is for THIS specific ISBN`,
+        },
+        {
+          role: 'user',
+          content: `Web search results for ISBN ${normalizedIsbn}:\n\n${bestSnippets}`,
+        },
+      ],
+      temperature: 0,
+      max_tokens: 500,
+    })
+
+    const content = completion.choices?.[0]?.message?.content?.trim()
+    if (!content) return null
+
+    // Parse the AI response as JSON
+    let bookData: Record<string, unknown>
+    try {
+      // Strip markdown code block if present
+      const jsonStr = content.replace(/^```json?\s*/, '').replace(/\s*```$/, '')
+      bookData = JSON.parse(jsonStr)
+    } catch {
+      console.error('[ISBN Lookup] Web search: AI response not valid JSON:', content.substring(0, 200))
+      return null
+    }
+
+    if (!bookData.title || typeof bookData.title !== 'string') {
+      console.log(`[ISBN Lookup] Web search: AI could not identify the book`)
+      return null
+    }
+
+    const language = normalizeLanguage(bookData.language as string) || inferLanguageFromIsbn(normalizedIsbn)
+
+    return {
+      title: bookData.title as string,
+      author: (bookData.author as string) || '',
+      description: (bookData.description as string) || null,
+      coverUrl: null, // Web search can't reliably provide cover URLs
+      publisher: (bookData.publisher as string) || null,
+      pageCount: (bookData.pageCount as number) || null,
+      language,
+      publishDate: (bookData.publishDate as string) || null,
+      isbn: normalizedIsbn,
+      categories: [],
+      suggestedCategorySlug: suggestCategory(language),
+      source: 'web-search',
+    }
+  } catch (error) {
+    console.error('Web Search fallback error:', error)
+    return null
+  }
+}
+
+// ============================================================
+// Cover Enrichment: Try to find a cover when the main result
+// has no cover URL. Uses Open Library Covers API and
+// Google Books thumbnail as fallbacks.
+// ============================================================
+
+async function tryEnrichCover(result: LookupResult, normalizedIsbn: string): Promise<LookupResult> {
+  if (result.coverUrl) return result
+
+  const isbn10 = isbn13To10(normalizedIsbn)
+
+  // 1. Try Open Library Covers API (HEAD request to check if cover exists)
+  for (const variant of [normalizedIsbn, isbn10].filter(Boolean) as string[]) {
+    try {
+      const coverResp = await fetch(
+        `https://covers.openlibrary.org/b/isbn/${variant}-L.jpg?default=false`,
+        { method: 'HEAD', redirect: 'manual' }
+      )
+      // Open Library Covers API returns 302 redirect if cover exists, 404 if not
+      if (coverResp.status === 302 || coverResp.status === 200) {
+        const location = coverResp.headers.get('location')
+        if (location) {
+          return { ...result, coverUrl: location.startsWith('http') ? location.replace('http://', 'https://') : `https://covers.openlibrary.org${location}` }
+        }
+      }
+    } catch {
+      // Ignore errors in cover enrichment
+    }
+  }
+
+  // 2. Try Google Books thumbnail by ISBN
+  try {
+    const gbResponse = await fetch(
+      `https://www.googleapis.com/books/v1/volumes?q=isbn:${normalizedIsbn}&fields=items(volumeInfo(imageLinks(thumbnail)))`,
+    )
+    if (gbResponse.ok) {
+      const gbData = await gbResponse.json()
+      const thumbnail = gbData.items?.[0]?.volumeInfo?.imageLinks?.thumbnail
+      if (thumbnail) {
+        return { ...result, coverUrl: thumbnail.replace('http://', 'https://').replace('&edge=curl', '') }
+      }
+    }
+  } catch {
+    // Ignore errors in cover enrichment
+  }
+
+  return result
+}
+
+// ============================================================
+// Metadata Enrichment: Fill missing fields from other sources
+// ============================================================
+
+function enrichResult(base: LookupResult, others: LookupResult[]): LookupResult {
+  let enriched = { ...base }
+
+  // Fill missing cover from other sources
+  if (!enriched.coverUrl) {
+    const withCover = others.find(r => r.coverUrl)
+    if (withCover) enriched.coverUrl = withCover.coverUrl
+  }
+
+  // Fill missing description from other sources
+  if (!enriched.description) {
+    const withDesc = others.find(r => r.description && r.description.length > 20)
+    if (withDesc) enriched.description = withDesc.description
+  }
+
+  // Fill missing publisher from other sources
+  if (!enriched.publisher) {
+    const withPub = others.find(r => r.publisher)
+    if (withPub) enriched.publisher = withPub.publisher
+  }
+
+  // Fill missing page count from other sources
+  if (!enriched.pageCount) {
+    const withPages = others.find(r => r.pageCount)
+    if (withPages) enriched.pageCount = withPages.pageCount
+  }
+
+  // Fill missing publish date from other sources
+  if (!enriched.publishDate) {
+    const withDate = others.find(r => r.publishDate)
+    if (withDate) enriched.publishDate = withDate.publishDate
+  }
+
+  // Fill missing categories from other sources
+  if (enriched.categories.length === 0) {
+    const withCats = others.find(r => r.categories && r.categories.length > 0)
+    if (withCats) enriched.categories = withCats.categories
+  }
+
+  return enriched
+}
+
+// ============================================================
 // Helper: Try a lookup function with both ISBN-10 and ISBN-13
 // ============================================================
 
@@ -1029,6 +1507,9 @@ function resultScore(result: LookupResult): number {
     'crossref': 2,
     'bnf': 2,
     'wikidata': 1,
+    'internet-archive': 1,
+    'google-enhanced': 1,
+    'web-search': 0,
     'google-broad': 0,
   }
   score += sourceBonus[result.source] || 0
@@ -1041,19 +1522,17 @@ function resultScore(result: LookupResult): number {
 // ============================================================
 
 /**
- * Look up a book by ISBN. Uses a sequential cascade through 8 sources:
+ * Look up a book by ISBN. Uses a two-phase parallel strategy:
  *
- * 1. Google Books (ISBN-13) - best covers & metadata
- * 2. Google Books (ISBN-10) - alternate variant
- * 3. Open Library Books (ISBN-13) - good covers
- * 4. Open Library Books (ISBN-10) - alternate variant
- * 5. Open Library Direct (ISBN-13) - finds books the Books API misses
- * 6. Open Library Search - broader OL search
- * 7. BNF - French national library (excellent for French books)
- * 8. Crossref - English/academic/trade books
- * 9. Wikidata - notable books
+ * Phase 1 (Fast): Google Books + Open Library in parallel
+ *   - If a result with a cover is found, return immediately (fast path)
  *
- * Each source is wrapped in its own try/catch. First non-null result is returned.
+ * Phase 2 (Comprehensive): All remaining sources in parallel
+ *   - BNF, Crossref, Wikidata, Internet Archive, OCLC Classify
+ *   - Best result selected by quality score
+ *
+ * After both phases: Cross-source metadata enrichment + cover enrichment
+ * from Open Library Covers API / Google Books if no cover found.
  */
 export async function lookupISBN(isbn: string): Promise<{
   result: LookupResult | null
@@ -1109,71 +1588,141 @@ export async function lookupISBN(isbn: string): Promise<{
   const normalizedIsbn = normalizeIsbn(cleanIsbn)
   const isbn10 = isbn13To10(normalizedIsbn)
 
+  console.log(`[ISBN Lookup] Starting two-phase parallel lookup for ${normalizedIsbn}`)
+
   // ============================================================
-  // Sequential cascade through all sources
+  // Phase 1: Fast sources (typically respond in < 2 seconds)
+  // Google Books + Open Library - best quality with covers
   // ============================================================
 
-  console.log(`[ISBN Lookup] Starting lookup for ${normalizedIsbn}`)
+  const phase1Sources: Array<{ name: string; fn: () => Promise<LookupResult | null> }> = [
+    { name: 'google-13', fn: () => lookupGoogleBooks(normalizedIsbn) },
+    { name: 'google-10', fn: () => isbn10 ? lookupGoogleBooks(isbn10) : Promise.resolve(null) },
+    { name: 'openlibrary-13', fn: () => lookupOpenLibrary(normalizedIsbn) },
+    { name: 'openlibrary-10', fn: () => isbn10 ? lookupOpenLibrary(isbn10) : Promise.resolve(null) },
+  ]
 
-  let result: LookupResult | null = null
+  const phase1Results = await Promise.allSettled(
+    phase1Sources.map(async ({ name, fn }) => {
+      try {
+        const result = await fn()
+        if (result) console.log(`[ISBN Lookup] Phase 1 ✓ Found by ${name}`)
+        return result
+      } catch (e) {
+        console.error(`[ISBN Lookup] Phase 1 ✗ ${name} error:`, (e as Error)?.message)
+        return null
+      }
+    })
+  )
 
-  // 1. Google Books (ISBN-13) - best quality overall
-  try {
-    result = await lookupGoogleBooks(normalizedIsbn)
-    if (result) return { result }
-  } catch (e) { console.error('[ISBN] google-13 error:', (e as Error)?.message) }
+  const phase1Valid: LookupResult[] = phase1Results
+    .filter((r): r is PromiseFulfilledResult<LookupResult | null> => r.status === 'fulfilled' && r.value !== null)
+    .map(r => r.value!)
 
-  // 2. Google Books (ISBN-10) - some books only indexed by ISBN-10
-  if (isbn10) {
-    try {
-      result = await lookupGoogleBooks(isbn10)
-      if (result) return { result }
-    } catch (e) { console.error('[ISBN] google-10 error:', (e as Error)?.message) }
+  // Fast path: if Phase 1 found a result WITH a cover, return immediately
+  if (phase1Valid.length > 0) {
+    const bestWithCover = phase1Valid
+      .filter(r => r.coverUrl)
+      .sort((a, b) => resultScore(b) - resultScore(a))[0]
+
+    if (bestWithCover) {
+      console.log(`[ISBN Lookup] Fast return from ${bestWithCover.source} (score: ${resultScore(bestWithCover)})`)
+      return { result: bestWithCover }
+    }
   }
 
-  // 3. Open Library Books API (ISBN-13)
-  try {
-    result = await lookupOpenLibrary(normalizedIsbn)
-    if (result) return { result }
-  } catch (e) { console.error('[ISBN] openlibrary-13 error:', (e as Error)?.message) }
+  // ============================================================
+  // Phase 2: Comprehensive sources (may be slower but broader coverage)
+  // BNF, Crossref, Wikidata, Internet Archive, OCLC Classify, Google Broad
+  // ============================================================
 
-  // 4. Open Library Books API (ISBN-10)
-  if (isbn10) {
+  const phase2Sources: Array<{ name: string; fn: () => Promise<LookupResult | null> }> = [
+    { name: 'openlibrary-direct', fn: () => lookupOpenLibraryDirect(normalizedIsbn) },
+    { name: 'openlibrary-search', fn: () => lookupOpenLibrarySearch(normalizedIsbn) },
+    { name: 'bnf', fn: () => lookupBNF(normalizedIsbn) },
+    { name: 'crossref', fn: () => lookupCrossref(normalizedIsbn) },
+    { name: 'internet-archive', fn: () => lookupInternetArchive(normalizedIsbn) },
+    { name: 'google-enhanced', fn: () => lookupGoogleBooksEnhanced(normalizedIsbn) },
+    { name: 'openlibrary-direct-10', fn: () => isbn10 ? lookupOpenLibraryDirect(isbn10) : Promise.resolve(null) },
+    { name: 'openlibrary-search-10', fn: () => isbn10 ? lookupOpenLibrarySearch(isbn10) : Promise.resolve(null) },
+    { name: 'wikidata', fn: () => lookupWikidata(normalizedIsbn) },
+    { name: 'google-broad', fn: () => lookupGoogleBooksBroad(normalizedIsbn) },
+  ]
+
+  const SOURCE_TIMEOUT = 10000 // 10 seconds per source
+
+  const phase2Results = await Promise.allSettled(
+    phase2Sources.map(async ({ name, fn }) => {
+      try {
+        const result = await Promise.race([
+          fn(),
+          new Promise<null>(resolve => setTimeout(() => resolve(null), SOURCE_TIMEOUT))
+        ])
+        if (result) console.log(`[ISBN Lookup] Phase 2 ✓ Found by ${name}`)
+        return result
+      } catch (e) {
+        console.error(`[ISBN Lookup] Phase 2 ✗ ${name} error:`, (e as Error)?.message)
+        return null
+      }
+    })
+  )
+
+  const phase2Valid: LookupResult[] = phase2Results
+    .filter((r): r is PromiseFulfilledResult<LookupResult | null> => r.status === 'fulfilled' && r.value !== null)
+    .map(r => r.value!)
+
+  // Combine all results from both phases
+  const allResults = [...phase1Valid, ...phase2Valid]
+
+  console.log(`[ISBN Lookup] Total: ${allResults.length} results from ${phase1Sources.length + phase2Sources.length} sources`)
+
+  if (allResults.length === 0) {
+    // ============================================================
+    // Phase 3: Web Search Fallback (only if all APIs failed)
+    // Uses z-ai-web-dev-sdk to search the entire web
+    // ============================================================
+
+    console.log(`[ISBN Lookup] All APIs failed, trying web search fallback...`)
+
     try {
-      result = await lookupOpenLibrary(isbn10)
-      if (result) return { result }
-    } catch (e) { console.error('[ISBN] openlibrary-10 error:', (e as Error)?.message) }
+      const webResult = await Promise.race([
+        lookupWebSearch(normalizedIsbn),
+        new Promise<null>(resolve => setTimeout(() => resolve(null), 15000))
+      ])
+
+      if (webResult) {
+        console.log(`[ISBN Lookup] Phase 3 ✓ Found by web-search`)
+        // Try to enrich cover for web search results
+        const enriched = await tryEnrichCover(webResult, normalizedIsbn)
+        console.log(`[ISBN Lookup] Best result from ${enriched.source} (score: ${resultScore(enriched)}, cover: ${enriched.coverUrl ? 'yes' : 'no'})`)
+        return { result: enriched }
+      }
+    } catch (e) {
+      console.error('[ISBN Lookup] Phase 3 web-search error:', (e as Error)?.message)
+    }
+
+    return { result: null }
   }
 
-  // 5. Open Library Direct ISBN endpoint
-  try {
-    result = await lookupOpenLibraryDirect(normalizedIsbn)
-    if (result) return { result }
-  } catch (e) { console.error('[ISBN] ol-direct error:', (e as Error)?.message) }
+  // Sort by quality score (best first)
+  allResults.sort((a, b) => resultScore(b) - resultScore(a))
 
-  // 6. Open Library Search API (broader coverage)
-  try {
-    result = await lookupOpenLibrarySearch(normalizedIsbn)
-    if (result) return { result }
-  } catch (e) { console.error('[ISBN] ol-search error:', (e as Error)?.message) }
+  // Start with the best result
+  let bestResult = allResults[0]
 
-  // 7. BNF - Bibliothèque Nationale de France (French books)
-  try {
-    result = await lookupBNF(normalizedIsbn)
-    if (result) return { result }
-  } catch (e) { console.error('[ISBN] bnf error:', (e as Error)?.message) }
+  // Cross-source enrichment: fill missing fields from other sources
+  const otherResults = allResults.filter(r => r.source !== bestResult.source)
+  bestResult = enrichResult(bestResult, otherResults)
 
-  // 8. Crossref API (English/academic/trade books)
-  try {
-    result = await lookupCrossref(normalizedIsbn)
-    if (result) return { result }
-  } catch (e) { console.error('[ISBN] crossref error:', (e as Error)?.message) }
+  // Cover enrichment: if still no cover, try dedicated cover APIs
+  if (!bestResult.coverUrl) {
+    bestResult = await tryEnrichCover(bestResult, normalizedIsbn)
+    if (bestResult.coverUrl) {
+      console.log(`[ISBN Lookup] Cover enriched from cover API`)
+    }
+  }
 
-  // 9. Wikidata SPARQL (notable books)
-  try {
-    result = await lookupWikidata(normalizedIsbn)
-    if (result) return { result }
-  } catch (e) { console.error('[ISBN] wikidata error:', (e as Error)?.message) }
+  console.log(`[ISBN Lookup] Best result from ${bestResult.source} (score: ${resultScore(bestResult)}, cover: ${bestResult.coverUrl ? 'yes' : 'no'})`)
 
-  return { result: null }
+  return { result: bestResult }
 }
