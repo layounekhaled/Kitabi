@@ -2563,11 +2563,18 @@ function enrichResult(base: LookupResult, others: LookupResult[]): LookupResult 
     if (withDate) enriched.publishDate = withDate.publishDate
   }
 
-  // Fill missing categories from other sources
-  if (enriched.categories.length === 0) {
-    const withCats = others.find(r => r.categories && r.categories.length > 0)
-    if (withCats) enriched.categories = withCats.categories
+  // Merge categories from ALL sources for better genre classification
+  const allCategories = [...enriched.categories]
+  for (const other of others) {
+    if (other.categories && other.categories.length > 0) {
+      for (const cat of other.categories) {
+        if (!allCategories.some(c => c.toLowerCase() === cat.toLowerCase())) {
+          allCategories.push(cat)
+        }
+      }
+    }
   }
+  enriched.categories = allCategories
 
   return enriched
 }

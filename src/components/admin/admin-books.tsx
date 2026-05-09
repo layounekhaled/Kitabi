@@ -55,6 +55,7 @@ import {
   ChevronRight,
   Loader2,
   ScanSearch,
+  Tags,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -83,6 +84,7 @@ interface Book {
   pricePrint: number | null
   margin: number | null
   printDelay: string | null
+  genre: string | null
   isAvailable: boolean
   isDraft: boolean
   isPublished: boolean
@@ -124,6 +126,7 @@ function BooksTable({
               <TableHead className="hidden md:table-cell">{t.book.author}</TableHead>
               <TableHead className="hidden lg:table-cell">ISBN</TableHead>
               <TableHead>{t.book.price}</TableHead>
+              <TableHead className="hidden lg:table-cell">Genre</TableHead>
               <TableHead>{t.common.status}</TableHead>
               <TableHead className="text-right">{t.common.actions}</TableHead>
             </TableRow>
@@ -155,6 +158,13 @@ function BooksTable({
                 </TableCell>
                 <TableCell className="text-sm font-medium">
                   {book.priceSale ? `${book.priceSale} ${t.common.da}` : '-'}
+                </TableCell>
+                <TableCell className="hidden lg:table-cell">
+                  {book.genre ? (
+                    <Badge variant="secondary" className="text-[10px] bg-blue-50 text-blue-700">{book.genre}</Badge>
+                  ) : (
+                    <span className="text-xs text-slate-300">—</span>
+                  )}
                 </TableCell>
                 <TableCell>
                   <div className="flex gap-1">
@@ -245,6 +255,7 @@ export default function AdminBooks() {
   const [selectedBook, setSelectedBook] = useState<Book | null>(null)
   const [saving, setSaving] = useState(false)
   const [isbnLooking, setIsbnLooking] = useState(false)
+  const [reclassifying, setReclassifying] = useState(false)
 
   // Form state
   const [form, setForm] = useState({
@@ -497,6 +508,29 @@ export default function AdminBooks() {
     }
   }
 
+  const handleReclassify = async () => {
+    setReclassifying(true)
+    try {
+      const res = await fetch('/api/books/reclassify', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      })
+      const data = await res.json()
+      if (data.results) {
+        toast.success(`Genres mis à jour : ${data.results.updated} réussis, ${data.results.failed} échoués`)
+      } else if (data.message) {
+        toast.success(data.message)
+      } else {
+        toast.error('Erreur de classification')
+      }
+      fetchBooks()
+    } catch {
+      toast.error('Erreur lors de la classification des genres')
+    } finally {
+      setReclassifying(false)
+    }
+  }
+
   const togglePublish = async (book: Book) => {
     try {
       const res = await fetch(`/api/books/${book.id}`, {
@@ -520,10 +554,21 @@ export default function AdminBooks() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-slate-800">{t.admin.bookManagement}</h1>
-        <Button onClick={openNewBook} className="gap-2 bg-amber-500 hover:bg-amber-600 text-white">
-          <Plus className="w-4 h-4" />
-          {t.admin.addBook}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={handleReclassify}
+            disabled={reclassifying}
+            variant="outline"
+            className="gap-2 border-blue-300 text-blue-600 hover:bg-blue-50"
+          >
+            {reclassifying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Tags className="w-4 h-4" />}
+            {reclassifying ? 'Classification...' : 'Classifier les genres'}
+          </Button>
+          <Button onClick={openNewBook} className="gap-2 bg-amber-500 hover:bg-amber-600 text-white">
+            <Plus className="w-4 h-4" />
+            {t.admin.addBook}
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
