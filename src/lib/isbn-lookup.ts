@@ -13,7 +13,11 @@
 // 12. DNB SRU API (Deutsche Nationalbibliothek - good international coverage)
 // 13. SUDOC (French university library catalog - excellent for French books)
 // 14. Inventaire.io (open-source book database, good for French books)
-// 15. Web Search (z-ai-web-dev-sdk) - last resort, searches the entire web
+// 15. HathiTrust API (digital library, excellent for academic/Arabic books)
+// 16. LibraryThing API (excellent coverage of books in all languages)
+// 17. Google Books Arabic Query (broader search for Arabic ISBNs)
+// 18. Open Library Title Search Fallback (cover enrichment by title)
+// 19. Web Search (z-ai-web-dev-sdk) - last resort, searches the entire web
 //
 // Strategy: Three-phase parallel lookup.
 // Phase 1: Fast sources (Google Books + Open Library) - return immediately if cover found
@@ -1877,7 +1881,343 @@ async function lookupInventaireByIsbn(searchIsbn: string, normalizedIsbn: string
 }
 
 // ============================================================
-// Source 15: Web Search (z-ai-web-dev-sdk)
+// Helper: Detect Arabic ISBN prefixes
+// ============================================================
+
+function isArabicPrefix(isbn: string): boolean {
+  return isbn.startsWith('9789961') || isbn.startsWith('9789954') ||
+         isbn.startsWith('978977') || isbn.startsWith('9789948') ||
+         isbn.startsWith('9789960') || isbn.startsWith('9789933') ||
+         isbn.startsWith('978614') || isbn.startsWith('9789953') ||
+         isbn.startsWith('9789947') || isbn.startsWith('9789927') ||
+         isbn.startsWith('97899901') || isbn.startsWith('97899902') ||
+         isbn.startsWith('97899903') || isbn.startsWith('9786050') ||
+         isbn.startsWith('9789790') || isbn.startsWith('9780230')
+}
+
+// ============================================================
+// Source 15: HathiTrust API
+// Digital library with excellent coverage of academic books
+// including Arabic. Uses the public JSON API.
+// ============================================================
+
+async function lookupHathiTrust(isbn: string): Promise<LookupResult | null> {
+  try {
+    const normalizedIsbn = normalizeIsbn(isbn)
+
+    // Try full JSON first (more metadata), then brief JSON as fallback
+    const endpoints = [
+      `https://catalog.hathitrust.org/api/volumes/full/json/${normalizedIsbn}`,
+      `https://catalog.hathitrust.org/api/volumes/brief/json/${normalizedIsbn}`,
+    ]
+
+    for (const url of endpoints) {
+      try {
+        const resp = await fetch(url)
+        if (!resp.ok) continue
+
+        const data = await resp.json()
+        const records = data?.records
+        if (!records || typeof records !== 'object') continue
+
+        // Pick the first available record
+        const recordIds = Object.keys(records)
+        if (recordIds.length === 0) continue
+
+        const recordId = recordIds[0]
+        const record = records[recordId]
+        const isFull = url.includes('/full/json/')
+
+        const titles: string[] = []
+        const pubDates: string[] = []
+        const publishers: string[] = []
+        let author = ''
+        let description: string | null = null
+
+        if (isFull && record?.record?.data) {
+          const recordData = record.record.data
+          if (Array.isArray(recordData.titles)) {
+            titles.push(...recordData.titles.filter((t: unknown): t is string => typeof t === 'string'))
+          }
+          if (Array.isArray(recordData.pubDates)) {
+            pubDates.push(...recordData.pubDates.filter((d: unknown): d is string => typeof d === 'string'))
+          }
+          if (Array.isArray(recordData.publishers)) {
+            publishers.push(...recordData.publishers.filter((p: unknown): p is string => typeof p === 'string'))
+          }
+          if (Array.isArray(recordData.authors) && recordData.authors.length > 0) {
+            const firstAuthor = recordData.authors[0]
+            author = typeof firstAuthor === 'object' && firstAuthor !== null && 'name' in firstAuthor
+              ? String(firstAuthor.name)
+              : String(firstAuthor)
+          }
+        }
+
+        // For brief JSON, try to get title from the record's titles array
+        if (!isFull) {
+          if (record?.titles && Array.isArray(record.titles)) {
+            titles.push(...record.titles.filter((t: unknown): t is string => typeof t === 'string'))
+          }
+          if (record?.pubDates && Array.isArray(record.pubDates)) {
+            pubDates.push(...record.pubDates.filter((d: unknown): d is string => typeof d === 'string'))
+          }
+          if (record?.publishers && Array.isArray(record.publishers)) {
+            publishers.push(...record.publishers.filter((p: unknown): p is string => typeof p === 'string'))
+          }
+        }
+
+        if (titles.length === 0) continue
+
+        // Build cover URL from the record ID
+        const coverUrl = `https://babel.hathitrust.org/cgi/imgsrv/image?id=${recordId};seq=1;size=400`
+
+        // Try to infer language from title (detect Arabic characters)
+        let language = inferLanguageFromIsbn(normalizedIsbn)
+        const titleText = titles[0] || ''
+        if (/[\u0600-\u06FF]/.test(titleText)) {
+          language = 'ar'
+        } else if (/[a-zA-Z]/.test(titleText)) {
+          language = 'en'
+        }
+
+        const publishDate = pubDates.length > 0 ? pubDates[0] : null
+
+        return {
+          title: titleText,
+          author,
+          description,
+          coverUrl,
+          publisher: publishers.length > 0 ? publishers[0] : null,
+          pageCount: null,
+          language,
+          publishDate,
+          isbn: normalizedIsbn,
+          categories: [],
+          suggestedCategorySlug: suggestCategory(language),
+          source: 'hathitrust',
+        }
+      } catch {
+        // Try next endpoint
+        continue
+      }
+    }
+
+    return null
+  } catch (error) {
+    console.error('[ISBN Lookup] HathiTrust error:', error)
+    return null
+  }
+}
+
+// ============================================================
+// Source 16: LibraryThing API
+// Free API with excellent coverage of books in all languages.
+// Uses thingISBN to get a work ID, then fetches metadata.
+// ============================================================
+
+async function lookupLibraryThing(isbn: string): Promise<LookupResult | null> {
+  try {
+    const normalizedIsbn = normalizeIsbn(isbn)
+
+    // Step 1: Get work ID from thingISBN
+    const thingIsbnUrl = `https://www.librarything.com/api/thingISBN/${normalizedIsbn}`
+    const thingResp = await fetch(thingIsbnUrl, {
+      headers: { 'User-Agent': 'Kitab123/1.0 (contact@kitabi.dz)' },
+    })
+    if (!thingResp.ok) return null
+
+    const thingData = await thingResp.json()
+    // thingISBN returns a list of ISBNs that belong to the same work
+    if (!Array.isArray(thingData) || thingData.length === 0) return null
+
+    // Step 2: Get title using the first ISBN from the work
+    const firstIsbn = thingData[0]
+    const titleUrl = `https://www.librarything.com/api/title/${firstIsbn}`
+    const titleResp = await fetch(titleUrl, {
+      headers: { 'User-Agent': 'Kitab123/1.0 (contact@kitabi.dz)' },
+    })
+    if (!titleResp.ok) return null
+
+    const titleText = (await titleResp.text()).trim()
+    if (!titleText || titleText.length < 2) return null
+
+    // Step 3: Try to get more metadata from workinfo JSON
+    let author = ''
+    let publisher: string | null = null
+    let publishDate: string | null = null
+    let pageCount: number | null = null
+    let description: string | null = null
+
+    try {
+      // Try workinfo with the first ISBN
+      const workInfoUrl = `https://www.librarything.com/api/json/workinfo?id=${firstIsbn}`
+      const workResp = await fetch(workInfoUrl, {
+        headers: { 'User-Agent': 'Kitab123/1.0 (contact@kitabi.dz)' },
+      })
+      if (workResp.ok) {
+        const workData = await workResp.json()
+        const info = workData?.bookinfo || workData?.workinfo || workData
+        if (info && typeof info === 'object') {
+          if (info.author) author = String(info.author)
+          if (info.publisher) publisher = String(info.publisher)
+          if (info.date) publishDate = String(info.date)
+          if (info.pages) pageCount = parseInt(String(info.pages), 10) || null
+          if (info.summary) description = String(info.summary)
+        }
+      }
+    } catch {
+      // workinfo is optional, continue with just the title
+    }
+
+    // Infer language from title
+    let language = inferLanguageFromIsbn(normalizedIsbn)
+    if (/[\u0600-\u06FF]/.test(titleText)) {
+      language = 'ar'
+    } else if (/[a-zA-Z]/.test(titleText)) {
+      language = 'en'
+    }
+
+    return {
+      title: titleText,
+      author,
+      description,
+      coverUrl: null,
+      publisher,
+      pageCount,
+      language,
+      publishDate,
+      isbn: normalizedIsbn,
+      categories: [],
+      suggestedCategorySlug: suggestCategory(language),
+      source: 'librarything',
+    }
+  } catch (error) {
+    console.error('[ISBN Lookup] LibraryThing error:', error)
+    return null
+  }
+}
+
+// ============================================================
+// Source 17: Google Books with Arabic Query (broader search)
+// When an ISBN has an Arabic prefix, search Google Books with
+// broader queries that can find books not indexed by isbn: operator.
+// ============================================================
+
+async function lookupGoogleBooksArabic(isbn: string): Promise<LookupResult | null> {
+  try {
+    const normalizedIsbn = normalizeIsbn(isbn)
+
+    // Try broader searches without strict isbn: prefix
+    const queries = [
+      `https://www.googleapis.com/books/v1/volumes?q=${normalizedIsbn}&maxResults=5`,
+      `https://www.googleapis.com/books/v1/volumes?q=${normalizedIsbn}+كتاب&maxResults=3`,
+    ]
+
+    for (const url of queries) {
+      try {
+        const resp = await fetch(url)
+        if (!resp.ok) continue
+
+        const data = await resp.json()
+        if (!data.items || data.items.length === 0) continue
+
+        for (const item of data.items) {
+          const volumeInfo = item.volumeInfo
+          if (!volumeInfo || !volumeInfo.title) continue
+
+          // Verify ISBN match (loose - check if our ISBN appears in identifiers)
+          const identifiers = volumeInfo.industryIdentifiers || []
+          const hasMatch = identifiers.some(
+            (id: { type: string; identifier: string }) => {
+              const clean = id.identifier.replace(/[-\s]/g, '')
+              return clean === normalizedIsbn ||
+                     clean === isbn ||
+                     normalizeIsbn(clean) === normalizedIsbn
+            }
+          )
+
+          // Accept if title contains the ISBN digits (some Arabic books list ISBN in title)
+          const titleHasIsbn = volumeInfo.title.includes(normalizedIsbn) ||
+                               volumeInfo.title.includes(isbn)
+
+          if (!hasMatch && !titleHasIsbn) continue
+
+          const title = volumeInfo.subtitle
+            ? `${volumeInfo.title}: ${volumeInfo.subtitle}`
+            : volumeInfo.title
+
+          const author = Array.isArray(volumeInfo.authors) ? volumeInfo.authors.join(', ') : ''
+          const language = normalizeLanguage(volumeInfo.language) || 'ar'
+
+          const coverUrl = volumeInfo.imageLinks?.thumbnail
+            ? volumeInfo.imageLinks.thumbnail.replace('http://', 'https://').replace('&edge=curl', '')
+            : null
+
+          return {
+            title,
+            author,
+            description: volumeInfo.description || null,
+            coverUrl,
+            publisher: volumeInfo.publisher || null,
+            pageCount: volumeInfo.pageCount || null,
+            language,
+            publishDate: volumeInfo.publishedDate || null,
+            isbn: normalizedIsbn,
+            categories: volumeInfo.categories || [],
+            suggestedCategorySlug: suggestCategory(language),
+            source: 'google-arabic',
+          }
+        }
+      } catch {
+        continue
+      }
+    }
+
+    return null
+  } catch (error) {
+    console.error('[ISBN Lookup] Google Books Arabic error:', error)
+    return null
+  }
+}
+
+// ============================================================
+// Source 18: Open Library Title Search Fallback
+// When we have a title but no cover, search Open Library by
+// title to find a matching cover image.
+// This is used as an enrichment step, not a primary lookup.
+// ============================================================
+
+async function lookupOpenLibraryCoverByTitle(
+  title: string,
+  author: string
+): Promise<string | null> {
+  if (!title || title.length < 2) return null
+
+  try {
+    const params = new URLSearchParams({
+      title,
+      limit: '1',
+      fields: 'cover_i',
+    })
+    if (author) params.set('author', author)
+
+    const resp = await fetch(
+      `https://openlibrary.org/search.json?${params.toString()}`
+    )
+    if (!resp.ok) return null
+
+    const data = await resp.json()
+    const coverId = data?.docs?.[0]?.cover_i
+    if (!coverId) return null
+
+    return `https://covers.openlibrary.org/b/id/${coverId}-L.jpg`
+  } catch {
+    return null
+  }
+}
+
+// ============================================================
+// Source 19: Web Search (z-ai-web-dev-sdk)
 // Last resort: search the entire web for the ISBN.
 // Can find books from retailer sites, publisher pages, blogs, etc.
 // Uses AI to extract structured book data from search results.
@@ -1909,12 +2249,27 @@ async function lookupWebSearch(isbn: string): Promise<LookupResult | null> {
     }
     const keyword = langKeywords[inferredLang] || 'book'
 
-    // Try multiple search queries
-    const queries = [
+    // Try multiple search queries - include Arabic-specific queries for Arabic ISBNs
+    const isArabic = isArabicPrefix(normalizedIsbn)
+    const queries: string[] = [
       `"${normalizedIsbn}" ${keyword}`,
       isbn10 ? `"${isbn10}" ${keyword}` : null,
       `${normalizedIsbn} ${keyword}`,
     ].filter(Boolean) as string[]
+
+    // Add Arabic-specific search queries when the ISBN has an Arabic prefix
+    if (isArabic) {
+      const arabicQueries = [
+        `"${normalizedIsbn}" كتاب`,
+        isbn10 ? `"${isbn10}" كتاب` : null,
+        `"${normalizedIsbn}" دار نشر`,
+        `"${normalizedIsbn}" مؤلف`,
+        `"${normalizedIsbn}" site:jamalon.com`,
+        `"${normalizedIsbn}" site:neelwafurat.com`,
+        `"${normalizedIsbn}" site:goodreads.com`,
+      ].filter(Boolean) as string[]
+      queries.push(...arabicQueries)
+    }
 
     // Generic ISBN lookup sites to filter out (they don't contain book metadata)
     const spamHosts = [
@@ -2099,6 +2454,18 @@ async function tryEnrichCover(result: LookupResult, normalizedIsbn: string): Pro
     // Ignore errors in cover enrichment
   }
 
+  // 3. Try Open Library search by title (fallback when we have a title but no cover)
+  if (result.title) {
+    try {
+      const coverUrl = await lookupOpenLibraryCoverByTitle(result.title, result.author)
+      if (coverUrl) {
+        return { ...result, coverUrl }
+      }
+    } catch {
+      // Ignore errors in cover enrichment
+    }
+  }
+
   return result
 }
 
@@ -2204,9 +2571,12 @@ function resultScore(result: LookupResult): number {
     'sudoc': 2,
     'dnb': 2,
     'inventaire': 2,
+    'hathitrust': 2,
+    'librarything': 2,
     'wikidata': 1,
     'internet-archive': 1,
     'google-enhanced': 1,
+    'google-arabic': 1,
     'web-search': 0,
     'google-broad': 0,
   }
@@ -2349,6 +2719,13 @@ export async function lookupISBN(isbn: string): Promise<{
     { name: 'inventaire', fn: () => lookupInventaire(normalizedIsbn) },
     { name: 'wikidata', fn: () => lookupWikidata(normalizedIsbn) },
     { name: 'google-broad', fn: () => lookupGoogleBooksBroad(normalizedIsbn) },
+    // New sources for better Arabic & international coverage
+    { name: 'hathitrust', fn: () => lookupHathiTrust(normalizedIsbn) },
+    { name: 'hathitrust-10', fn: () => isbn10 ? lookupHathiTrust(isbn10) : Promise.resolve(null) },
+    { name: 'librarything', fn: () => lookupLibraryThing(normalizedIsbn) },
+    { name: 'librarything-10', fn: () => isbn10 ? lookupLibraryThing(isbn10) : Promise.resolve(null) },
+    { name: 'google-arabic', fn: () => isArabicPrefix(normalizedIsbn) ? lookupGoogleBooksArabic(normalizedIsbn) : Promise.resolve(null) },
+    { name: 'google-arabic-10', fn: () => (isArabicPrefix(normalizedIsbn) && isbn10) ? lookupGoogleBooksArabic(isbn10) : Promise.resolve(null) },
   ]
 
   const SOURCE_TIMEOUT = 10000 // 10 seconds per source
