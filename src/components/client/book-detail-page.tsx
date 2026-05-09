@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  ShoppingCart, ChevronRight, ArrowLeft, Printer,
+  ShoppingCart, ChevronRight, ArrowLeft,
   Info, CheckCircle, BookOpen, Clock
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -240,13 +240,11 @@ export function BookDetailPage() {
               )}
             </div>
 
-            {/* Print Delay */}
-            {book.printDelay && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Clock className="h-4 w-4 text-gold" />
-                <span>{t('book.printDelay')}: {book.printDelay}</span>
-              </div>
-            )}
+            {/* Estimated Delivery */}
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Clock className="h-4 w-4 text-gold" />
+              <span>{t('checkout.estimatedDelivery')}</span>
+            </div>
 
             {/* Description */}
             {book.description && (
@@ -315,17 +313,7 @@ export function BookDetailPage() {
 
             <Separator />
 
-            {/* Print on Demand Notice */}
-            <Card className="border-gold/30 bg-gold/5">
-              <CardContent className="p-3 flex items-start gap-2.5">
-                <Info className="h-4 w-4 text-gold mt-0.5 shrink-0" />
-                <div className="text-xs text-muted-foreground">
-                  <span className="font-medium text-navy">{t('home.printOnDemand')}</span>
-                  {' — '}
-                  {t('book.printOnDemandNote')} {book.printDelay || '3-5 jours'}
-                </div>
-              </CardContent>
-            </Card>
+
 
             {/* Quantity & Add to Cart */}
             <div className="flex items-center gap-4 pt-2">

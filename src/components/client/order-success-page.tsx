@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { CheckCircle, ArrowRight, Package, Clock, Printer } from 'lucide-react'
+import { CheckCircle, ArrowRight, Package, Clock, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -75,28 +75,23 @@ export function OrderSuccessPage() {
                 </div>
               </div>
 
-              {/* Print on Demand Notice */}
-              <div className="flex items-center gap-2.5 p-3 rounded-lg bg-gold/10 border border-gold/20">
-                <Printer className="h-5 w-5 text-gold shrink-0" />
-                <p className="text-xs text-muted-foreground text-start">
-                  {t('home.printOnDemandDesc')}
+              {/* Order Confirmed Notice */}
+              <div className="flex items-center gap-2.5 p-3 rounded-lg bg-blue-50 border border-blue-100">
+                <ShieldCheck className="h-5 w-5 text-blue-600 shrink-0" />
+                <p className="text-xs text-blue-800 text-start">
+                  {t('orderSuccess.confirmationSent')}
                 </p>
               </div>
 
-              {/* Confirmation Note */}
+              {/* Package Note */}
               <div className="flex items-center gap-2.5 p-3 rounded-lg bg-emerald-50 border border-emerald-100">
                 <Package className="h-5 w-5 text-emerald-600 shrink-0" />
                 <p className="text-xs text-emerald-800 text-start">
-                  {t('orderSuccess.confirmationSent')}
+                  {t('orderSuccess.thankYou')}
                 </p>
               </div>
             </CardContent>
           </Card>
-
-          {/* Thank You */}
-          <p className="text-base font-medium text-navy mb-8">
-            {t('orderSuccess.thankYou')}
-          </p>
 
           {/* Actions */}
           <div className="flex flex-col sm:flex-row items-center gap-3 justify-center">

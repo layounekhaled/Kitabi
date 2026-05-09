@@ -3,8 +3,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  BookOpen, Printer, Award, Library, Truck,
-  ArrowRight, Sparkles, Info, Tag, ChevronRight,
+  BookOpen, Award, Library, Truck,
+  ArrowRight, Sparkles, Tag, ChevronRight,
   Globe, Languages, BookMarked, Search
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -194,15 +194,15 @@ export function HomePage() {
   const browseByGenreTitle = language === 'ar' ? 'تصفح حسب النوع' : language === 'en' ? 'Browse by Genre' : 'Parcourir par genre'
 
   const whyFeatures = [
-    { icon: <Printer className="h-7 w-7 text-gold" />, title: t('home.fastPrinting'), desc: t('home.fastPrintingDesc') },
-    { icon: <Award className="h-7 w-7 text-gold" />, title: t('home.qualityPrint'), desc: t('home.qualityPrintDesc') },
     { icon: <Library className="h-7 w-7 text-gold" />, title: t('home.wideSelection'), desc: t('home.wideSelectionDesc') },
+    { icon: <Award className="h-7 w-7 text-gold" />, title: t('home.qualityPrint'), desc: t('home.qualityPrintDesc') },
     { icon: <Truck className="h-7 w-7 text-gold" />, title: t('home.deliveryAcross'), desc: t('home.deliveryAcrossDesc') },
+    { icon: <Sparkles className="h-7 w-7 text-gold" />, title: language === 'ar' ? 'خدمة مميزة' : language === 'en' ? 'Premium Service' : 'Service Premium', desc: language === 'ar' ? 'تجربة قراءة مميزة مع جودة عالية وتوصيل سريع' : language === 'en' ? 'A premium reading experience with high quality and fast delivery' : 'Une expérience de lecture premium avec qualité et livraison rapide' },
   ]
 
   const steps = [
     { num: '1', title: t('home.step1'), desc: t('home.step1Desc'), icon: <BookOpen className="h-6 w-6" /> },
-    { num: '2', title: t('home.step2'), desc: t('home.step2Desc'), icon: <Printer className="h-6 w-6" /> },
+    { num: '2', title: language === 'ar' ? 'أضف إلى السلة' : language === 'en' ? 'Add to Cart' : 'Ajoutez au panier', desc: language === 'ar' ? 'اختر الكتب التي تعجبك وأضفها إلى سلتك' : language === 'en' ? 'Select the books you like and add them to your cart' : 'Choisissez les livres qui vous plaisent et ajoutez-les au panier', icon: <Globe className="h-6 w-6" /> },
     { num: '3', title: t('home.step3'), desc: t('home.step3Desc'), icon: <Truck className="h-6 w-6" /> },
     { num: '4', title: t('home.step4'), desc: t('home.step4Desc'), icon: <Sparkles className="h-6 w-6" /> },
   ]
@@ -226,7 +226,7 @@ export function HomePage() {
             >
               <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gold/20 text-gold text-sm font-medium mb-6">
                 <Sparkles className="h-4 w-4" />
-                {t('home.printOnDemand')}
+                {language === 'ar' ? 'مكتبتك الإلكترونية المفضلة' : language === 'en' ? 'Your Favorite Online Bookstore' : 'Votre librairie en ligne préférée'}
               </div>
               <h1 className="font-heading text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-bold text-white leading-tight mb-6">
                 {t('home.heroTitle')}
@@ -632,26 +632,7 @@ export function HomePage() {
         </div>
       </section>
 
-      {/* ═══════ Print on Demand Notice ═══════ */}
-      <section className="py-12 sm:py-16 bg-beige/40">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <Card className="border-gold/30 bg-gradient-to-r from-gold/5 to-transparent">
-            <CardContent className="p-6 sm:p-8 flex flex-col sm:flex-row items-start gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gold/10">
-                <Info className="h-6 w-6 text-gold" />
-              </div>
-              <div>
-                <h3 className="font-heading text-lg font-semibold text-navy mb-2">
-                  {t('home.printOnDemand')}
-                </h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  {t('home.printOnDemandDesc')}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </section>
+
     </div>
   )
 }
