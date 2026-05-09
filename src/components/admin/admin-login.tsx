@@ -56,7 +56,7 @@ export default function AdminLogin() {
             <BookOpen className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-white tracking-tight">Kitabi</h1>
-          <p className="text-slate-400 mt-1 text-sm">Print-on-Demand Bookstore</p>
+          <p className="text-slate-400 mt-1 text-sm">Librairie en ligne</p>
         </div>
 
         {/* Login Card */}

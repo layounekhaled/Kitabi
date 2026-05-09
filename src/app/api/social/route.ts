@@ -56,7 +56,7 @@ function generateMarketingContent(
   if (book.pageCount) content += `📄 ${book.pageCount} pages\n`
   if (price) content += `💰 Prix: ${price}\n`
   content += `\n🚚 Livraison dans toutes les wilayas\n`
-  if (isInstagram) content += `\n#kitabi #livres #lecture #impressionsàlademande #algérie`
+  if (isInstagram) content += `\n#kitabi #livres #lecture #librairie #algérie`
 
   return content
 }

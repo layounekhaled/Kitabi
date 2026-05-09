@@ -1,20 +1,58 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   BookOpen, Award, Library, Truck,
-  ArrowRight, Sparkles, Tag, ChevronRight,
-  Globe, Languages, BookMarked, Search
+  ArrowRight, Sparkles, ChevronLeft, ChevronRight,
+  Star, Users, TrendingUp, Shield, Globe
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Badge } from '@/components/ui/badge'
 import { useRouterStore } from '@/stores/router-store'
 import { useTranslation } from '@/lib/i18n'
 import { BookCard, type BookData } from './book-card'
-import { getGenreLabel, getGenreIcon, getGenreColor, genreLabels } from '@/lib/genre-utils'
+
+// ─── Slider Data ───
+const slides = [
+  {
+    image: '/slider/slide1.webp',
+    titleFr: 'Votre librairie en ligne favorite',
+    titleAr: 'مكتبتك الإلكترونية المفضلة',
+    titleEn: 'Your Favorite Online Bookstore',
+    subtitleFr: 'Des milliers de livres en français, arabe et anglais',
+    subtitleAr: 'آلاف الكتب بالفرنسية والعربية والإنجليزية',
+    subtitleEn: 'Thousands of books in French, Arabic and English',
+    ctaFr: 'Explorer le catalogue',
+    ctaAr: 'استكشف الكتالوج',
+    ctaEn: 'Explore the Catalog',
+  },
+  {
+    image: '/slider/slide2.webp',
+    titleFr: 'La lecture, un plaisir accessible',
+    titleAr: 'القراءة متعة في متناول الجميع',
+    titleEn: 'Reading, an Accessible Pleasure',
+    subtitleFr: 'Livraison rapide partout en Algérie, paiement à la livraison',
+    subtitleAr: 'توصيل سريع لكل ولايات الجزائر، الدفع عند الاستلام',
+    subtitleEn: 'Fast delivery across Algeria, pay on delivery',
+    ctaFr: 'Découvrir nos livres',
+    ctaAr: 'اكتشف كتبنا',
+    ctaEn: 'Discover Our Books',
+  },
+  {
+    image: '/slider/slide3.webp',
+    titleFr: 'Des livres soigneusement sélectionnés',
+    titleAr: 'كتب مختارة بعناية',
+    titleEn: 'Carefully Selected Books',
+    subtitleFr: 'Romans, sciences, religion, histoire et bien plus encore',
+    subtitleAr: 'روايات، علوم، دين، تاريخ وأكثر',
+    subtitleEn: 'Novels, sciences, religion, history and more',
+    ctaFr: 'Voir les nouveautés',
+    ctaAr: 'شاهد الجديد',
+    ctaEn: 'See What\'s New',
+  },
+]
 
 // ─── Language Selection Data ───
 const bookLanguages = [
@@ -27,10 +65,10 @@ const bookLanguages = [
     descFr: 'روايات، شعر، دين، تاريخ وأكثر',
     descAr: 'روايات، شعر، دين، تاريخ وأكثر',
     descEn: 'Novels, poetry, religion, history and more',
-    color: 'from-emerald-500 to-teal-700',
+    gradient: 'from-emerald-500 to-teal-600',
     bgLight: 'bg-emerald-50',
     textColor: 'text-emerald-700',
-    icon: '📖',
+    count: 0,
   },
   {
     code: 'fr',
@@ -41,10 +79,10 @@ const bookLanguages = [
     descFr: 'Romans, sciences, philosophie, art et plus',
     descAr: 'روايات، علوم، فلسفة، فن وأكثر',
     descEn: 'Novels, sciences, philosophy, art and more',
-    color: 'from-blue-500 to-indigo-700',
+    gradient: 'from-blue-500 to-indigo-600',
     bgLight: 'bg-blue-50',
     textColor: 'text-blue-700',
-    icon: '📚',
+    count: 0,
   },
   {
     code: 'en',
@@ -52,49 +90,113 @@ const bookLanguages = [
     titleFr: 'Livres en Anglais',
     titleAr: 'كتب باللغة الإنجليزية',
     titleEn: 'English Books',
-    descFr: 'Fiction, science, education, biographies and more',
-    descAr: 'روايات، علوم، تعليم، سير ذاتية وأكثر',
-    descEn: 'Fiction, science, education, biographies and more',
-    color: 'from-amber-500 to-orange-700',
+    descFr: 'Fiction, science, biographies et plus',
+    descAr: 'روايات، علوم، سير ذاتية وأكثر',
+    descEn: 'Fiction, science, biographies and more',
+    gradient: 'from-amber-500 to-orange-600',
     bgLight: 'bg-amber-50',
     textColor: 'text-amber-700',
-    icon: '📕',
+    count: 0,
   },
 ]
 
+// ─── Animations ───
 const fadeUp = {
-  hidden: { opacity: 0, y: 20 },
+  hidden: { opacity: 0, y: 30 },
   visible: (i: number) => ({
     opacity: 1,
     y: 0,
-    transition: { delay: i * 0.08, duration: 0.5 },
+    transition: { delay: i * 0.1, duration: 0.6, ease: 'easeOut' },
   }),
 }
 
-const fadeIn = {
-  initial: { opacity: 0 },
-  animate: { opacity: 1, transition: { duration: 0.3 } },
-  exit: { opacity: 0, transition: { duration: 0.2 } },
+const slideVariants = {
+  enter: (direction: number) => ({
+    x: direction > 0 ? '100%' : '-100%',
+    opacity: 0,
+  }),
+  center: {
+    x: 0,
+    opacity: 1,
+  },
+  exit: (direction: number) => ({
+    x: direction > 0 ? '-100%' : '100%',
+    opacity: 0,
+  }),
 }
 
-interface GenreWithBooks {
-  genre: string
-  count: number
-  books: BookData[]
-}
+// ─── Testimonials Data ───
+const testimonials = [
+  {
+    nameFr: 'Amina B.',
+    nameAr: 'أمينة ب.',
+    nameEn: 'Amina B.',
+    textFr: 'Excellent service ! J\'ai reçu mes livres en 3 jours. La qualité est au rendez-vous et les prix sont très compétitifs.',
+    textAr: 'خدمة ممتازة! استلمت كتبي في 3 أيام. الجودة رائعة والأسعار منافسة جدا.',
+    textEn: 'Excellent service! I received my books in 3 days. Great quality and very competitive prices.',
+    rating: 5,
+  },
+  {
+    nameFr: 'Karim M.',
+    nameAr: 'كريم م.',
+    nameEn: 'Karim M.',
+    textFr: 'Kitibi est devenu ma librairie préférée. Un large choix de livres en arabe et en français. Je recommande !',
+    textAr: 'كتبي أصبحت مكتبتي المفضلة. تشكيلة واسعة من الكتب بالعربية والفرنسية. أنصح بها!',
+    textEn: 'Kitibi has become my favorite bookstore. A wide selection of books in Arabic and French. Highly recommended!',
+    rating: 5,
+  },
+  {
+    nameFr: 'Sarah L.',
+    nameAr: 'سارة ل.',
+    nameEn: 'Sarah L.',
+    textFr: 'Très satisfaite de ma commande. Les livres étaient bien emballés et la livraison était rapide partout en Algérie.',
+    textAr: 'أنا سعيدة جدا بطلبي. الكتب كانت مغلفة جيدا والتوصيل كان سريعا لكل الولايات.',
+    textEn: 'Very satisfied with my order. Books were well packaged and delivery was fast across Algeria.',
+    rating: 5,
+  },
+]
 
 export function HomePage() {
   const { t, language } = useTranslation()
   const navigate = useRouterStore((s) => s.navigate)
-  const [selectedLanguage, setSelectedLanguage] = useState<string | null>(null)
-  const [genresForLang, setGenresForLang] = useState<Array<{ genre: string; count: number }>>([])
-  const [genreBooks, setGenreBooks] = useState<GenreWithBooks[]>([])
   const [featuredBooks, setFeaturedBooks] = useState<BookData[]>([])
-  const [loadingGenres, setLoadingGenres] = useState(false)
   const [loadingBooks, setLoadingBooks] = useState(true)
   const [langBookCounts, setLangBookCounts] = useState<Record<string, number>>({})
 
-  // Fetch total book counts per language
+  // ─── Slider State ───
+  const [[currentSlide, direction], setCurrentSlide] = useState([0, 0])
+  const slideInterval = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const startAutoSlide = useCallback(() => {
+    if (slideInterval.current) clearInterval(slideInterval.current)
+    slideInterval.current = setInterval(() => {
+      setCurrentSlide(([prev]) => [prev === slides.length - 1 ? 0 : prev + 1, 1])
+    }, 5000)
+  }, [])
+
+  const goToSlide = (index: number) => {
+    setCurrentSlide([index, index > currentSlide ? 1 : -1])
+    startAutoSlide()
+  }
+
+  const prevSlide = () => {
+    setCurrentSlide(([prev]) => [prev === 0 ? slides.length - 1 : prev - 1, -1])
+    startAutoSlide()
+  }
+
+  const nextSlide = () => {
+    setCurrentSlide(([prev]) => [prev === slides.length - 1 ? 0 : prev + 1, 1])
+    startAutoSlide()
+  }
+
+  useEffect(() => {
+    startAutoSlide()
+    return () => {
+      if (slideInterval.current) clearInterval(slideInterval.current)
+    }
+  }, [startAutoSlide])
+
+  // Fetch book counts per language
   useEffect(() => {
     async function fetchCounts() {
       try {
@@ -130,53 +232,22 @@ export function HomePage() {
     fetchData()
   }, [])
 
-  // Fetch genres when language is selected
-  const fetchGenresForLang = useCallback(async (lang: string) => {
-    setLoadingGenres(true)
-    try {
-      const res = await fetch(`/api/books/genres?language=${lang}`)
-      if (res.ok) {
-        const data = await res.json()
-        setGenresForLang(data.genres || [])
-
-        // Fetch 4 books per genre for preview
-        const genreData: GenreWithBooks[] = []
-        const topGenres = (data.genres || []).slice(0, 6)
-        await Promise.all(
-          topGenres.map(async (g: { genre: string; count: number }) => {
-            try {
-              const booksRes = await fetch(`/api/books?genre=${g.genre}&language=${lang}&limit=4`)
-              if (booksRes.ok) {
-                const bd = await booksRes.json()
-                genreData.push({
-                  genre: g.genre,
-                  count: g.count,
-                  books: (bd.books || []).slice(0, 4),
-                })
-              }
-            } catch { /* skip */ }
-          })
-        )
-        setGenreBooks(genreData)
-      }
-    } catch { /* silent */ } finally {
-      setLoadingGenres(false)
-    }
-  }, [])
-
-  const handleLanguageSelect = (langCode: string) => {
-    if (selectedLanguage === langCode) {
-      setSelectedLanguage(null)
-      setGenresForLang([])
-      setGenreBooks([])
-    } else {
-      setSelectedLanguage(langCode)
-      fetchGenresForLang(langCode)
-    }
+  const getSlideTitle = (slide: typeof slides[0]) => {
+    if (language === 'ar') return slide.titleAr
+    if (language === 'en') return slide.titleEn
+    return slide.titleFr
   }
 
-  const handleGenreClick = (genreSlug: string) => {
-    navigate('catalog', { language: selectedLanguage!, genre: genreSlug })
+  const getSlideSubtitle = (slide: typeof slides[0]) => {
+    if (language === 'ar') return slide.subtitleAr
+    if (language === 'en') return slide.subtitleEn
+    return slide.subtitleFr
+  }
+
+  const getSlideCta = (slide: typeof slides[0]) => {
+    if (language === 'ar') return slide.ctaAr
+    if (language === 'en') return slide.ctaEn
+    return slide.ctaFr
   }
 
   const getLangTitle = (lang: typeof bookLanguages[0]) => {
@@ -191,374 +262,298 @@ export function HomePage() {
     return lang.descFr
   }
 
-  const browseByGenreTitle = language === 'ar' ? 'تصفح حسب النوع' : language === 'en' ? 'Browse by Genre' : 'Parcourir par genre'
-
   const whyFeatures = [
     { icon: <Library className="h-7 w-7 text-gold" />, title: t('home.wideSelection'), desc: t('home.wideSelectionDesc') },
     { icon: <Award className="h-7 w-7 text-gold" />, title: t('home.qualityPrint'), desc: t('home.qualityPrintDesc') },
     { icon: <Truck className="h-7 w-7 text-gold" />, title: t('home.deliveryAcross'), desc: t('home.deliveryAcrossDesc') },
-    { icon: <Sparkles className="h-7 w-7 text-gold" />, title: language === 'ar' ? 'خدمة مميزة' : language === 'en' ? 'Premium Service' : 'Service Premium', desc: language === 'ar' ? 'تجربة قراءة مميزة مع جودة عالية وتوصيل سريع' : language === 'en' ? 'A premium reading experience with high quality and fast delivery' : 'Une expérience de lecture premium avec qualité et livraison rapide' },
+    { icon: <Shield className="h-7 w-7 text-gold" />, title: language === 'ar' ? 'دفع آمن' : language === 'en' ? 'Secure Payment' : 'Paiement sécurisé', desc: language === 'ar' ? 'ادفع عند الاستلام بكل أمان وراحة' : language === 'en' ? 'Pay on delivery with complete safety and peace of mind' : 'Payez à la livraison en toute sécurité et sérénité' },
   ]
 
   const steps = [
     { num: '1', title: t('home.step1'), desc: t('home.step1Desc'), icon: <BookOpen className="h-6 w-6" /> },
-    { num: '2', title: language === 'ar' ? 'أضف إلى السلة' : language === 'en' ? 'Add to Cart' : 'Ajoutez au panier', desc: language === 'ar' ? 'اختر الكتب التي تعجبك وأضفها إلى سلتك' : language === 'en' ? 'Select the books you like and add them to your cart' : 'Choisissez les livres qui vous plaisent et ajoutez-les au panier', icon: <Globe className="h-6 w-6" /> },
+    { num: '2', title: t('home.step2'), desc: t('home.step2Desc'), icon: <Users className="h-6 w-6" /> },
     { num: '3', title: t('home.step3'), desc: t('home.step3Desc'), icon: <Truck className="h-6 w-6" /> },
     { num: '4', title: t('home.step4'), desc: t('home.step4Desc'), icon: <Sparkles className="h-6 w-6" /> },
   ]
 
+  // Stats
+  const stats = [
+    { icon: <BookOpen className="h-6 w-6" />, value: '5000+', label: language === 'ar' ? 'كتاب' : language === 'en' ? 'Books' : 'Livres' },
+    { icon: <Users className="h-6 w-6" />, value: '2000+', label: language === 'ar' ? 'عميل سعيد' : language === 'en' ? 'Happy Customers' : 'Clients satisfaits' },
+    { icon: <TrendingUp className="h-6 w-6" />, value: '58', label: language === 'ar' ? 'ولاية مغطاة' : language === 'en' ? 'Wilayas Covered' : 'Wilayas couvertes' },
+    { icon: <Star className="h-6 w-6" />, value: '4.8', label: language === 'ar' ? 'تقييم العملاء' : language === 'en' ? 'Customer Rating' : 'Avis clients' },
+  ]
+
   return (
     <div className="animate-fade-in">
-      {/* ═══════ Hero Section ═══════ */}
-      <section className="relative overflow-hidden bg-navy">
-        <div className="absolute inset-0 bg-gradient-to-br from-navy via-navy/95 to-navy/80" />
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-20 start-10 w-72 h-72 bg-gold rounded-full blur-3xl" />
-          <div className="absolute bottom-10 end-10 w-96 h-96 bg-gold/50 rounded-full blur-3xl" />
-          <div className="absolute top-1/2 start-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-white/5 rounded-full blur-3xl" />
-        </div>
-        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-16 sm:py-20 lg:py-28">
-          <div className="max-w-3xl mx-auto text-center">
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7 }}
-            >
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gold/20 text-gold text-sm font-medium mb-6">
-                <Sparkles className="h-4 w-4" />
-                {language === 'ar' ? 'مكتبتك الإلكترونية المفضلة' : language === 'en' ? 'Your Favorite Online Bookstore' : 'Votre librairie en ligne préférée'}
-              </div>
-              <h1 className="font-heading text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-bold text-white leading-tight mb-6">
-                {t('home.heroTitle')}
-              </h1>
-              <p className="text-lg sm:text-xl text-white/70 mb-8 leading-relaxed">
-                {t('home.heroSubtitle')}
-              </p>
-
-              {/* ─── Step 1: Language Selection ─── */}
-              <div className="mt-8">
-                <p className="text-white/50 text-sm font-medium uppercase tracking-wider mb-4">
-                  {language === 'ar' ? 'خطوة ١: اختر لغة الكتاب' : language === 'en' ? 'Step 1: Choose the book language' : 'Étape 1 : Choisissez la langue du livre'}
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl mx-auto">
-                  {bookLanguages.map((lang, i) => (
-                    <motion.button
-                      key={lang.code}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.3 + i * 0.1, duration: 0.4 }}
-                      onClick={() => handleLanguageSelect(lang.code)}
-                      className={`relative overflow-hidden rounded-2xl p-4 sm:p-5 text-start transition-all duration-300 group ${
-                        selectedLanguage === lang.code
-                          ? `bg-gradient-to-br ${lang.color} text-white shadow-lg shadow-black/20 scale-[1.02]`
-                          : 'bg-white/10 backdrop-blur-sm text-white hover:bg-white/15 border border-white/10'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 mb-2">
-                        <span className="text-2xl">{lang.flag}</span>
-                        <div>
-                          <h3 className="font-heading text-sm sm:text-base font-bold leading-tight">
-                            {getLangTitle(lang)}
-                          </h3>
-                        </div>
-                      </div>
-                      <p className={`text-xs leading-relaxed ${selectedLanguage === lang.code ? 'text-white/80' : 'text-white/50'}`}>
-                        {getLangDesc(lang)}
-                      </p>
-                      {langBookCounts[lang.code] !== undefined && (
-                        <Badge
-                          className={`mt-2 text-[10px] font-bold px-2 py-0.5 rounded-full border-0 ${
-                            selectedLanguage === lang.code
-                              ? 'bg-white/20 text-white'
-                              : 'bg-white/10 text-white/70'
-                          }`}
-                        >
-                          {langBookCounts[lang.code]} {language === 'ar' ? 'كتاب' : language === 'en' ? 'books' : 'livres'}
-                        </Badge>
-                      )}
-                      {selectedLanguage === lang.code && (
-                        <motion.div
-                          layoutId="langCheck"
-                          className="absolute top-2 end-2 h-6 w-6 bg-white/20 rounded-full flex items-center justify-center"
-                          initial={{ scale: 0 }}
-                          animate={{ scale: 1 }}
-                          transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                        >
-                          <svg className="h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                        </motion.div>
-                      )}
-                    </motion.button>
-                  ))}
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        </div>
-        {/* Bottom wave */}
-        <div className="absolute bottom-0 w-full overflow-hidden leading-none">
-          <svg viewBox="0 0 1440 60" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-auto">
-            <path d="M0 60L1440 60L1440 0C1440 0 1080 60 720 60C360 60 0 0 0 0L0 60Z" fill="white" />
-          </svg>
-        </div>
-      </section>
-
-      {/* ═══════ Step 2: Genre Selection (shown after language) ═══════ */}
-      <AnimatePresence mode="wait">
-        {selectedLanguage && (
-          <motion.section
-            key={selectedLanguage}
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.4, ease: 'easeInOut' }}
-            className="overflow-hidden"
+      {/* ═══════ HERO CAROUSEL ═══════ */}
+      <section className="relative w-full h-[500px] sm:h-[550px] lg:h-[600px] overflow-hidden">
+        <AnimatePresence initial={false} custom={direction} mode="wait">
+          <motion.div
+            key={currentSlide}
+            custom={direction}
+            variants={slideVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
+            className="absolute inset-0"
           >
-            <div className="py-12 sm:py-16 bg-gradient-to-b from-white to-beige/30">
-              <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                {/* Step indicator */}
-                <div className="text-center mb-8">
-                  <div className="inline-flex items-center gap-2 text-sm font-medium text-gold mb-3">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gold text-white text-xs font-bold">2</span>
-                    {language === 'ar'
-                      ? 'اختر النوع الأدبي'
-                      : language === 'en'
-                        ? 'Choose the literary genre'
-                        : 'Choisissez le genre littéraire'}
-                  </div>
-                  <h2 className="font-heading text-2xl sm:text-3xl font-bold text-navy">
-                    {browseByGenreTitle}
-                  </h2>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    {language === 'ar'
-                      ? 'تصفح الأنواع المتاحة واختر ما يناسبك'
-                      : language === 'en'
-                        ? 'Browse available genres and pick what interests you'
-                        : 'Parcourez les genres disponibles et choisissez ce qui vous intéresse'}
-                  </p>
-                </div>
+            {/* Background Image */}
+            <div className="absolute inset-0">
+              <img
+                src={slides[currentSlide].image}
+                alt=""
+                className="w-full h-full object-cover"
+              />
+              {/* Gradient Overlay */}
+              <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-black/10" />
+            </div>
 
-                {/* "All books in this language" button */}
-                <div className="flex justify-center mb-8">
+            {/* Slide Content */}
+            <div className="relative h-full mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex items-center">
+              <motion.div
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.2 }}
+                className="max-w-xl text-white"
+              >
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gold/20 backdrop-blur-sm text-gold text-xs font-semibold mb-4 border border-gold/20">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  {language === 'ar' ? 'مكتبتك الإلكترونية' : language === 'en' ? 'Online Bookstore' : 'Librairie en ligne'}
+                </div>
+                <h1 className="font-heading text-3xl sm:text-4xl lg:text-5xl font-bold leading-tight mb-4 text-white drop-shadow-lg">
+                  {getSlideTitle(slides[currentSlide])}
+                </h1>
+                <p className="text-base sm:text-lg text-white/85 mb-8 leading-relaxed drop-shadow">
+                  {getSlideSubtitle(slides[currentSlide])}
+                </p>
+                <div className="flex items-center gap-3">
                   <Button
-                    variant="outline"
-                    onClick={() => navigate('catalog', { language: selectedLanguage })}
-                    className="border-gold/40 text-gold hover:bg-gold hover:text-white font-medium rounded-full px-6"
+                    size="lg"
+                    onClick={() => navigate('catalog')}
+                    className="bg-gold hover:bg-gold/90 text-white font-semibold px-8 h-12 rounded-xl shadow-lg shadow-gold/30 transition-all hover:shadow-xl hover:shadow-gold/40 hover:scale-[1.02]"
                   >
-                    <BookOpen className="me-2 h-4 w-4" />
-                    {language === 'ar'
-                      ? 'عرض جميع الكتب'
-                      : language === 'en'
-                        ? `View all ${bookLanguages.find(l => l.code === selectedLanguage)?.flag} books`
-                        : `Voir tous les livres ${bookLanguages.find(l => l.code === selectedLanguage)?.flag}`}
+                    {getSlideCta(slides[currentSlide])}
                     <ArrowRight className="ms-2 h-4 w-4 rtl-flip" />
                   </Button>
                 </div>
-
-                {loadingGenres ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-                    {Array.from({ length: 12 }).map((_, i) => (
-                      <div key={i} className="space-y-3">
-                        <Skeleton className="aspect-square w-full rounded-2xl" />
-                        <Skeleton className="h-4 w-3/4 mx-auto" />
-                        <Skeleton className="h-3 w-1/2 mx-auto" />
-                      </div>
-                    ))}
-                  </div>
-                ) : genresForLang.length > 0 ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-                    {genresForLang.map((g, i) => {
-                      const info = genreLabels[g.genre]
-                      return (
-                        <motion.div
-                          key={g.genre}
-                          custom={i}
-                          variants={fadeUp}
-                          initial="hidden"
-                          animate="visible"
-                        >
-                          <button
-                            onClick={() => handleGenreClick(g.genre)}
-                            className="group w-full text-start"
-                          >
-                            <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${getGenreColor(g.genre)} p-4 sm:p-5 text-white shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-1`}>
-                              <div className="absolute top-2 end-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <ArrowRight className="h-4 w-4 rtl-flip" />
-                              </div>
-                              <div className="text-3xl mb-3">{getGenreIcon(g.genre)}</div>
-                              <h3 className="font-heading text-sm font-bold mb-1 leading-tight">
-                                {getGenreLabel(g.genre, language)}
-                              </h3>
-                              <p className="text-xs text-white/70">
-                                {g.count} {language === 'ar' ? 'كتاب' : language === 'en' ? 'books' : 'livres'}
-                              </p>
-                            </div>
-                          </button>
-                        </motion.div>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <div className="text-center py-12">
-                    <BookOpen className="h-12 w-12 mx-auto mb-3 text-muted-foreground/30" />
-                    <p className="text-muted-foreground">
-                      {language === 'ar'
-                        ? 'لا توجد كتب مصنفة في هذه اللغة بعد'
-                        : language === 'en'
-                          ? 'No classified books in this language yet'
-                          : 'Aucun livre classé dans cette langue pour le moment'}
-                    </p>
-                    <Button
-                      variant="outline"
-                      onClick={() => navigate('catalog', { language: selectedLanguage })}
-                      className="mt-4"
-                    >
-                      {language === 'ar'
-                        ? 'تصفح جميع الكتب'
-                        : language === 'en'
-                          ? 'Browse all books'
-                          : 'Parcourir tous les livres'}
-                    </Button>
-                  </div>
-                )}
-              </div>
+              </motion.div>
             </div>
-          </motion.section>
-        )}
-      </AnimatePresence>
+          </motion.div>
+        </AnimatePresence>
 
-      {/* ═══════ Genre Book Previews (shown after language & genres loaded) ═══════ */}
-      <AnimatePresence mode="wait">
-        {selectedLanguage && genreBooks.length > 0 && !loadingGenres && (
-          <motion.section
-            key={`books-${selectedLanguage}`}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="py-12 sm:py-16"
-          >
-            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-              <div className="space-y-10">
-                {genreBooks.map((group, idx) => (
-                  <motion.div
-                    key={group.genre}
-                    custom={idx}
-                    variants={fadeUp}
-                    initial="hidden"
-                    whileInView="visible"
-                    viewport={{ once: true, margin: '-30px' }}
-                  >
-                    {/* Genre Header */}
-                    <div
-                      className="flex items-center justify-between mb-4 cursor-pointer group"
-                      onClick={() => handleGenreClick(group.genre)}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${getGenreColor(group.genre)} text-white shadow-sm`}>
-                          <span className="text-xl">{getGenreIcon(group.genre)}</span>
-                        </div>
-                        <div>
-                          <h3 className="font-heading text-lg font-bold text-navy group-hover:text-gold transition-colors">
-                            {getGenreLabel(group.genre, language)}
-                          </h3>
-                          <p className="text-xs text-muted-foreground">
-                            {group.count} {language === 'ar' ? 'كتاب' : language === 'en' ? 'books' : 'livres'}
-                          </p>
-                        </div>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-muted-foreground hover:text-gold text-xs"
-                      >
-                        {language === 'ar' ? 'المزيد' : language === 'en' ? 'More' : 'Plus'}
-                        <ChevronRight className="ms-1 h-3.5 w-3.5 rtl-flip" />
-                      </Button>
-                    </div>
+        {/* Navigation Arrows */}
+        <button
+          onClick={prevSlide}
+          className="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 z-10 flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full bg-white/10 backdrop-blur-md text-white hover:bg-white/25 transition-all border border-white/20"
+          aria-label="Previous slide"
+        >
+          <ChevronLeft className="h-5 w-5 rtl-flip" />
+        </button>
+        <button
+          onClick={nextSlide}
+          className="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 z-10 flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full bg-white/10 backdrop-blur-md text-white hover:bg-white/25 transition-all border border-white/20"
+          aria-label="Next slide"
+        >
+          <ChevronRight className="h-5 w-5 rtl-flip" />
+        </button>
 
-                    {/* Books Preview */}
-                    {group.books.length > 0 ? (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                        {group.books.map((book) => (
-                          <BookCard key={book.id} book={book} />
-                        ))}
-                      </div>
-                    ) : null}
+        {/* Dots */}
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2">
+          {slides.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => goToSlide(i)}
+              className={`h-2 rounded-full transition-all duration-500 ${
+                i === currentSlide
+                  ? 'w-8 bg-gold'
+                  : 'w-2 bg-white/40 hover:bg-white/70'
+              }`}
+              aria-label={`Go to slide ${i + 1}`}
+            />
+          ))}
+        </div>
+      </section>
 
-                    {/* Divider */}
-                    {idx < genreBooks.length - 1 && (
-                      <div className="mt-10 h-px bg-gradient-to-r from-transparent via-border/50 to-transparent" />
-                    )}
-                  </motion.div>
-                ))}
-              </div>
-            </div>
-          </motion.section>
-        )}
-      </AnimatePresence>
-
-      {/* ═══════ Featured Books (shown only when no language selected) ═══════ */}
-      {!selectedLanguage && (
-        <section className="py-12 sm:py-16 bg-beige/40">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between mb-8">
-              <div>
-                <h2 className="font-heading text-2xl sm:text-3xl font-bold text-navy">
-                  {t('home.featuredBooks')}
-                </h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {language === 'ar' ? 'أحدث الإضافات إلى مكتبتنا' : language === 'en' ? 'Latest additions to our library' : 'Derniers ajouts à notre catalogue'}
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                onClick={() => navigate('catalog')}
-                className="border-gold/40 text-gold hover:bg-gold hover:text-white"
+      {/* ═══════ STATS BAR ═══════ */}
+      <section className="bg-navy py-8">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+            {stats.map((stat, i) => (
+              <motion.div
+                key={stat.label}
+                custom={i}
+                variants={fadeUp}
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true }}
+                className="flex items-center gap-3"
               >
-                {t('home.viewAll')}
-                <ArrowRight className="ms-1.5 h-4 w-4 rtl-flip" />
-              </Button>
-            </div>
-            {loadingBooks ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <div key={i} className="space-y-3">
-                    <Skeleton className="aspect-[3/4] w-full rounded-xl" />
-                    <Skeleton className="h-4 w-3/4" />
-                    <Skeleton className="h-3 w-1/2" />
-                    <Skeleton className="h-4 w-1/3" />
-                  </div>
-                ))}
-              </div>
-            ) : featuredBooks.length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-                {featuredBooks.map((book) => (
-                  <BookCard key={book.id} book={book} />
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12 text-muted-foreground">
-                <BookOpen className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                <p>{t('common.noResults')}</p>
-              </div>
-            )}
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gold/15 shrink-0">
+                  {stat.icon}
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-gold">{stat.value}</p>
+                  <p className="text-xs text-white/70 font-medium">{stat.label}</p>
+                </div>
+              </motion.div>
+            ))}
           </div>
-        </section>
-      )}
+        </div>
+      </section>
 
-      {/* ═══════ Why Kitibi ═══════ */}
-      <section className="py-12 sm:py-16 bg-beige/40">
+      {/* ═══════ BROWSE BY LANGUAGE ═══════ */}
+      <section className="py-16 sm:py-20 bg-gradient-to-b from-white to-beige/20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <motion.div
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: '-50px' }}
-            className="text-center mb-10"
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+            className="text-center mb-12"
+          >
+            <div className="inline-flex items-center gap-2 text-sm font-semibold text-gold mb-3">
+              <Globe className="h-4 w-4" />
+              {language === 'ar' ? 'اختر لغة الكتاب' : language === 'en' ? 'Choose the book language' : 'Choisissez la langue du livre'}
+            </div>
+            <h2 className="font-heading text-2xl sm:text-3xl font-bold text-navy">
+              {language === 'ar' ? 'تصفح حسب اللغة' : language === 'en' ? 'Browse by Language' : 'Parcourir par langue'}
+            </h2>
+          </motion.div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 max-w-4xl mx-auto">
+            {bookLanguages.map((lang, i) => (
+              <motion.div
+                key={lang.code}
+                custom={i}
+                variants={fadeUp}
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true }}
+              >
+                <button
+                  onClick={() => navigate('catalog', { language: lang.code })}
+                  className="group w-full text-start overflow-hidden rounded-2xl bg-white shadow-sm border border-border/30 hover:shadow-xl hover:border-gold/30 transition-all duration-300 hover:-translate-y-1"
+                >
+                  {/* Gradient Top */}
+                  <div className={`h-2 bg-gradient-to-r ${lang.gradient}`} />
+                  <div className="p-6">
+                    <div className="flex items-center gap-3 mb-3">
+                      <span className="text-3xl">{lang.flag}</span>
+                      <div>
+                        <h3 className="font-heading text-base font-bold text-navy group-hover:text-gold transition-colors">
+                          {getLangTitle(lang)}
+                        </h3>
+                        {langBookCounts[lang.code] !== undefined && (
+                          <p className="text-xs text-muted-foreground">
+                            {langBookCounts[lang.code]} {language === 'ar' ? 'كتاب' : language === 'en' ? 'books' : 'livres'}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      {getLangDesc(lang)}
+                    </p>
+                    <div className="flex items-center gap-1 mt-4 text-gold text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                      {language === 'ar' ? 'تصفح الكتب' : language === 'en' ? 'Browse books' : 'Parcourir les livres'}
+                      <ArrowRight className="h-4 w-4 rtl-flip" />
+                    </div>
+                  </div>
+                </button>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ═══════ FEATURED BOOKS ═══════ */}
+      <section className="py-16 sm:py-20 bg-beige/30">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+            className="flex items-end justify-between mb-10"
+          >
+            <div>
+              <div className="flex items-center gap-2 text-sm font-semibold text-gold mb-2">
+                <Star className="h-4 w-4" />
+                {language === 'ar' ? 'الأكثر طلبا' : language === 'en' ? 'Most Popular' : 'Les plus demandés'}
+              </div>
+              <h2 className="font-heading text-2xl sm:text-3xl font-bold text-navy">
+                {t('home.featuredBooks')}
+              </h2>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => navigate('catalog')}
+              className="border-gold/40 text-gold hover:bg-gold hover:text-white font-medium rounded-full px-5 hidden sm:flex"
+            >
+              {t('home.viewAll')}
+              <ArrowRight className="ms-1.5 h-4 w-4 rtl-flip" />
+            </Button>
+          </motion.div>
+
+          {loadingBooks ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="space-y-3">
+                  <Skeleton className="aspect-[3/4] w-full rounded-xl" />
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-1/2" />
+                  <Skeleton className="h-4 w-1/3" />
+                </div>
+              ))}
+            </div>
+          ) : featuredBooks.length > 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+              {featuredBooks.map((book) => (
+                <BookCard key={book.id} book={book} />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12 text-muted-foreground">
+              <BookOpen className="h-12 w-12 mx-auto mb-3 opacity-30" />
+              <p>{t('common.noResults')}</p>
+            </div>
+          )}
+
+          <div className="flex justify-center mt-8 sm:hidden">
+            <Button
+              variant="outline"
+              onClick={() => navigate('catalog')}
+              className="border-gold/40 text-gold hover:bg-gold hover:text-white font-medium rounded-full px-5"
+            >
+              {t('home.viewAll')}
+              <ArrowRight className="ms-1.5 h-4 w-4 rtl-flip" />
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* ═══════ WHY KITIBI ═══════ */}
+      <section className="py-16 sm:py-20">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+            className="text-center mb-12"
           >
             <h2 className="font-heading text-2xl sm:text-3xl font-bold text-navy mb-3">
               {t('home.whyKitibi')}
             </h2>
+            <p className="text-muted-foreground max-w-xl mx-auto">
+              {language === 'ar'
+                ? 'نقدم لك تجربة تسوق كتب فريدة مع جودة عالية وتوصيل سريع'
+                : language === 'en'
+                  ? 'We offer you a unique book shopping experience with high quality and fast delivery'
+                  : 'Nous vous offrons une expérience d\'achat de livres unique avec qualité et livraison rapide'}
+            </p>
           </motion.div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {whyFeatures.map((feature, i) => (
@@ -570,9 +565,11 @@ export function HomePage() {
                 whileInView="visible"
                 viewport={{ once: true, margin: '-30px' }}
               >
-                <Card className="h-full border-border/50 text-center hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+                <Card className="h-full border-border/30 text-center hover:shadow-xl hover:-translate-y-1 transition-all duration-300 rounded-2xl overflow-hidden">
+                  {/* Top accent line */}
+                  <div className="h-1 gold-shimmer" />
                   <CardContent className="p-6 space-y-3">
-                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-gold/10">
+                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gold/10">
                       {feature.icon}
                     </div>
                     <h3 className="font-heading text-base font-semibold text-navy">
@@ -589,20 +586,21 @@ export function HomePage() {
         </div>
       </section>
 
-      {/* ═══════ How It Works ═══════ */}
-      <section className="py-12 sm:py-16">
+      {/* ═══════ HOW IT WORKS ═══════ */}
+      <section className="py-16 sm:py-20 bg-navy">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <motion.div
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: '-50px' }}
-            className="text-center mb-10"
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+            className="text-center mb-12"
           >
-            <h2 className="font-heading text-2xl sm:text-3xl font-bold text-navy mb-3">
+            <h2 className="font-heading text-2xl sm:text-3xl font-bold text-white mb-3">
               {t('home.howItWorks')}
             </h2>
           </motion.div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
             {steps.map((step, i) => (
               <motion.div
                 key={step.num}
@@ -611,28 +609,131 @@ export function HomePage() {
                 initial="hidden"
                 whileInView="visible"
                 viewport={{ once: true, margin: '-30px' }}
+                className="relative text-center"
               >
-                <div className="relative text-center">
-                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-navy text-white mb-4 shadow-lg">
-                    {step.icon}
-                  </div>
-                  <div className="absolute top-0 start-1/2 -translate-x-1/2 -translate-y-1 bg-gold text-white text-xs font-bold rounded-full h-6 w-6 flex items-center justify-center">
-                    {step.num}
-                  </div>
-                  <h3 className="font-heading text-base font-semibold text-navy mb-2 mt-1">
-                    {step.title}
-                  </h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    {step.desc}
-                  </p>
+                {/* Connector line */}
+                {i < steps.length - 1 && (
+                  <div className="hidden lg:block absolute top-8 start-[calc(50%+2rem)] w-[calc(100%-4rem)] h-px bg-gradient-to-r from-gold/30 to-gold/10" />
+                )}
+                <div className="relative z-10 mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gold text-navy mb-4 shadow-lg shadow-gold/20">
+                  {step.icon}
                 </div>
+                <div className="absolute -top-1 start-1/2 -translate-x-1/2 bg-white text-navy text-xs font-bold rounded-full h-6 w-6 flex items-center justify-center shadow-md z-20">
+                  {step.num}
+                </div>
+                <h3 className="font-heading text-base font-semibold text-white mb-2 mt-1">
+                  {step.title}
+                </h3>
+                <p className="text-sm text-white/60 leading-relaxed">
+                  {step.desc}
+                </p>
               </motion.div>
             ))}
           </div>
         </div>
       </section>
 
+      {/* ═══════ TESTIMONIALS ═══════ */}
+      <section className="py-16 sm:py-20 bg-gradient-to-b from-beige/20 to-white">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+            className="text-center mb-12"
+          >
+            <div className="flex items-center justify-center gap-1 text-gold mb-3">
+              {[1, 2, 3, 4, 5].map((s) => (
+                <Star key={s} className="h-5 w-5 fill-gold" />
+              ))}
+            </div>
+            <h2 className="font-heading text-2xl sm:text-3xl font-bold text-navy">
+              {language === 'ar' ? 'ماذا يقول عملاؤنا' : language === 'en' ? 'What Our Customers Say' : 'Ce que disent nos clients'}
+            </h2>
+          </motion.div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {testimonials.map((test, i) => (
+              <motion.div
+                key={i}
+                custom={i}
+                variants={fadeUp}
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true }}
+              >
+                <Card className="h-full border-border/30 rounded-2xl hover:shadow-lg transition-all duration-300">
+                  <CardContent className="p-6">
+                    <div className="flex items-center gap-0.5 text-gold mb-4">
+                      {Array.from({ length: test.rating }).map((_, s) => (
+                        <Star key={s} className="h-4 w-4 fill-gold" />
+                      ))}
+                    </div>
+                    <p className="text-sm text-muted-foreground leading-relaxed mb-4 italic">
+                      &ldquo;{language === 'ar' ? test.textAr : language === 'en' ? test.textEn : test.textFr}&rdquo;
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gold/10 text-gold font-bold text-sm">
+                        {test.nameFr.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-navy">
+                          {language === 'ar' ? test.nameAr : language === 'en' ? test.nameEn : test.nameFr}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {language === 'ar' ? 'عميل موثوق' : language === 'en' ? 'Verified Customer' : 'Client vérifié'}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
 
+      {/* ═══════ CTA SECTION ═══════ */}
+      <section className="relative py-20 sm:py-24 overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-navy via-navy to-navy/90" />
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-10 start-20 w-72 h-72 bg-gold rounded-full blur-3xl" />
+          <div className="absolute bottom-10 end-20 w-96 h-96 bg-gold/50 rounded-full blur-3xl" />
+        </div>
+        <div className="relative mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+          >
+            <BookOpen className="h-12 w-12 text-gold mx-auto mb-6" />
+            <h2 className="font-heading text-2xl sm:text-3xl lg:text-4xl font-bold text-white mb-4">
+              {language === 'ar'
+                ? 'ابدأ رحلتك مع القراءة اليوم'
+                : language === 'en'
+                  ? 'Start Your Reading Journey Today'
+                  : 'Commencez votre aventure de lecture aujourd\'hui'}
+            </h2>
+            <p className="text-base sm:text-lg text-white/70 mb-8 leading-relaxed max-w-xl mx-auto">
+              {language === 'ar'
+                ? 'اكتشف آلاف الكتب في مختلف اللغات والأنواع. توصيل سريع لكل ولايات الجزائر.'
+                : language === 'en'
+                  ? 'Discover thousands of books in various languages and genres. Fast delivery across all of Algeria.'
+                  : 'Découvrez des milliers de livres dans différentes langues et genres. Livraison rapide partout en Algérie.'}
+            </p>
+            <Button
+              size="lg"
+              onClick={() => navigate('catalog')}
+              className="bg-gold hover:bg-gold/90 text-white font-semibold px-10 h-13 rounded-xl shadow-lg shadow-gold/30 transition-all hover:shadow-xl hover:scale-[1.02]"
+            >
+              {t('home.exploreCatalog')}
+              <ArrowRight className="ms-2 h-4 w-4 rtl-flip" />
+            </Button>
+          </motion.div>
+        </div>
+      </section>
     </div>
   )
 }
+
