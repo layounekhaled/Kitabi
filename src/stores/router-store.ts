@@ -5,6 +5,7 @@ import { create } from 'zustand'
 export type PageName =
   | 'home'
   | 'catalog'
+  | 'genres'
   | 'bookDetail'
   | 'cart'
   | 'checkout'

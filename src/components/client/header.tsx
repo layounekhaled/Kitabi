@@ -43,6 +43,7 @@ export function Header() {
   const navLinks = [
     { page: 'home' as const, label: t('nav.home') },
     { page: 'catalog' as const, label: t('nav.catalog') },
+    { page: 'genres' as const, label: language === 'ar' ? 'الأنواع' : language === 'en' ? 'Genres' : 'Genres' },
   ]
 
   const languages: { code: Language; flag: string; label: string }[] = [

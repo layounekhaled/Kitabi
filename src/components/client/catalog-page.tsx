@@ -25,6 +25,7 @@ import { Separator } from '@/components/ui/separator'
 import { useRouterStore } from '@/stores/router-store'
 import { useTranslation } from '@/lib/i18n'
 import { BookCard, type BookData } from './book-card'
+import { getGenreLabel } from '@/lib/genre-utils'
 
 interface Category {
   id: string
@@ -46,27 +47,6 @@ const languageOptions = [
   { value: 'fr', labelFr: 'Français', labelAr: 'الفرنسية', labelEn: 'French' },
   { value: 'en', labelFr: 'Anglais', labelAr: 'الإنجليزية', labelEn: 'English' },
 ]
-
-const genreLabels: Record<string, { fr: string; ar: string; en: string }> = {
-  roman: { fr: 'Roman', ar: 'رواية', en: 'Fiction' },
-  histoire: { fr: 'Histoire', ar: 'تاريخ', en: 'History' },
-  sciences: { fr: 'Sciences', ar: 'علوم', en: 'Science' },
-  philosophie: { fr: 'Philosophie', ar: 'فلسفة', en: 'Philosophy' },
-  religion: { fr: 'Religion', ar: 'دين', en: 'Religion' },
-  poesie: { fr: 'Poésie', ar: 'شعر', en: 'Poetry' },
-  enfants: { fr: 'Enfants', ar: 'أطفال', en: 'Children' },
-  biographie: { fr: 'Biographie', ar: 'سيرة', en: 'Biography' },
-  education: { fr: 'Éducation', ar: 'تعليم', en: 'Education' },
-  politique: { fr: 'Politique', ar: 'سياسة', en: 'Politics' },
-  art: { fr: 'Art', ar: 'فن', en: 'Art' },
-  economie: { fr: 'Économie', ar: 'اقتصاد', en: 'Economics' },
-  droit: { fr: 'Droit', ar: 'قانون', en: 'Law' },
-  medecine: { fr: 'Médecine', ar: 'طب', en: 'Medicine' },
-  psychologie: { fr: 'Psychologie', ar: 'علم نفس', en: 'Psychology' },
-  informatique: { fr: 'Informatique', ar: 'حاسوب', en: 'Computers' },
-  sociologie: { fr: 'Sociologie', ar: 'علم اجتماع', en: 'Sociology' },
-  lettres: { fr: 'Lettres', ar: 'أدب', en: 'Literature' },
-}
 
 export function CatalogPage() {
   const { t, language } = useTranslation()
@@ -188,8 +168,8 @@ export function CatalogPage() {
     return opt.labelFr
   }
 
-  const getGenreLabel = (slug: string) => {
-    return genreLabels[slug]?.[language] || genreLabels[slug]?.fr || slug
+  const getGenreLabelFn = (slug: string) => {
+    return getGenreLabel(slug, language)
   }
 
   const FilterContent = () => (
@@ -247,7 +227,7 @@ export function CatalogPage() {
             <SelectItem value="__all__">{t('catalog.allGenres') || 'Tous les genres'}</SelectItem>
             {genres.map((g) => (
               <SelectItem key={g.genre} value={g.genre!}>
-                {getGenreLabel(g.genre)} ({g.count})
+                {getGenreLabelFn(g.genre)} ({g.count})
               </SelectItem>
             ))}
           </SelectContent>
@@ -379,7 +359,7 @@ export function CatalogPage() {
               )}
               {selectedGenre && (
                 <Badge variant="secondary" className="gap-1">
-                  {getGenreLabel(selectedGenre)}
+                  {getGenreLabelFn(selectedGenre)}
                   <button onClick={() => { setSelectedGenre(''); setPage(1) }}>
                     <X className="h-3 w-3" />
                   </button>

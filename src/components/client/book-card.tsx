@@ -10,6 +10,7 @@ import { useRouterStore } from '@/stores/router-store'
 import { useCartStore } from '@/stores/cart-store'
 import { useTranslation } from '@/lib/i18n'
 import { toast } from 'sonner'
+import { getGenreLabel } from '@/lib/genre-utils'
 
 export interface BookData {
   id: string
@@ -28,36 +29,15 @@ interface BookCardProps {
 }
 
 const languageLabels: Record<string, string> = {
-  fr: 'Français',
-  ar: 'العربية',
-  en: 'English',
+  fr: 'FR',
+  ar: 'AR',
+  en: 'EN',
 }
 
 const languageColors: Record<string, string> = {
-  fr: 'bg-blue-100 text-blue-800',
-  ar: 'bg-emerald-100 text-emerald-800',
-  en: 'bg-amber-100 text-amber-800',
-}
-
-const genreLabels: Record<string, { fr: string; ar: string; en: string }> = {
-  roman: { fr: 'Roman', ar: 'رواية', en: 'Fiction' },
-  histoire: { fr: 'Histoire', ar: 'تاريخ', en: 'History' },
-  sciences: { fr: 'Sciences', ar: 'علوم', en: 'Science' },
-  philosophie: { fr: 'Philosophie', ar: 'فلسفة', en: 'Philosophy' },
-  religion: { fr: 'Religion', ar: 'دين', en: 'Religion' },
-  poesie: { fr: 'Poésie', ar: 'شعر', en: 'Poetry' },
-  enfants: { fr: 'Enfants', ar: 'أطفال', en: 'Children' },
-  biographie: { fr: 'Biographie', ar: 'سيرة', en: 'Biography' },
-  education: { fr: 'Éducation', ar: 'تعليم', en: 'Education' },
-  politique: { fr: 'Politique', ar: 'سياسة', en: 'Politics' },
-  art: { fr: 'Art', ar: 'فن', en: 'Art' },
-  economie: { fr: 'Économie', ar: 'اقتصاد', en: 'Economics' },
-  droit: { fr: 'Droit', ar: 'قانون', en: 'Law' },
-  medecine: { fr: 'Médecine', ar: 'طب', en: 'Medicine' },
-  psychologie: { fr: 'Psychologie', ar: 'علم نفس', en: 'Psychology' },
-  informatique: { fr: 'Informatique', ar: 'حاسوب', en: 'Computers' },
-  sociologie: { fr: 'Sociologie', ar: 'علم اجتماع', en: 'Sociology' },
-  lettres: { fr: 'Lettres', ar: 'أدب', en: 'Literature' },
+  fr: 'bg-blue-500/90 text-white',
+  ar: 'bg-emerald-500/90 text-white',
+  en: 'bg-amber-500/90 text-white',
 }
 
 export function BookCard({ book }: BookCardProps) {
@@ -91,64 +71,99 @@ export function BookCard({ book }: BookCardProps) {
       transition={{ duration: 0.2 }}
     >
       <Card
-        className="group cursor-pointer overflow-hidden border border-border/50 shadow-sm hover:shadow-lg transition-shadow duration-300"
+        className="group cursor-pointer overflow-hidden border border-border/40 shadow-sm hover:shadow-xl rounded-xl transition-all duration-300 bg-white"
         onClick={handleCardClick}
       >
-        <div className="relative aspect-[3/4] overflow-hidden bg-muted">
+        {/* Cover Image */}
+        <div className="relative aspect-[3/4] overflow-hidden bg-gradient-to-br from-beige to-beige/60">
           {book.coverUrl ? (
-            <img
-              src={book.coverUrl}
-              alt={book.title}
-              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-              loading="lazy"
-            />
+            <>
+              <img
+                src={book.coverUrl}
+                alt={book.title}
+                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                loading="lazy"
+              />
+              {/* Subtle gradient overlay at bottom */}
+              <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            </>
           ) : (
-            <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-beige/50 p-4">
-              <BookOpen className="h-12 w-12 text-navy/30" />
-              <span className="text-center text-xs text-muted-foreground line-clamp-2 font-medium">
+            <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-4">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-navy/5">
+                <BookOpen className="h-8 w-8 text-navy/20" />
+              </div>
+              <span className="text-center text-xs text-muted-foreground/70 line-clamp-2 font-medium">
                 {book.title}
               </span>
             </div>
           )}
+
+          {/* Language Badge */}
           {book.language && (
             <Badge
-              className={`absolute top-2 start-2 text-[10px] font-medium px-1.5 py-0.5 ${languageColors[book.language] || 'bg-gray-100 text-gray-800'}`}
+              className={`absolute top-2.5 start-2.5 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md backdrop-blur-sm ${languageColors[book.language] || 'bg-gray-500/90 text-white'}`}
             >
               {languageLabels[book.language] || book.language}
             </Badge>
           )}
+
+          {/* Unavailable Overlay */}
           {!book.isAvailable && (
-            <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-              <Badge variant="destructive" className="text-xs">
+            <div className="absolute inset-0 bg-black/50 flex items-center justify-center backdrop-blur-[2px]">
+              <Badge variant="destructive" className="text-xs font-medium">
                 {t('book.unavailable')}
               </Badge>
             </div>
           )}
+
+          {/* Quick Add to Cart (shows on hover) */}
+          {book.isAvailable && book.priceSale && (
+            <div className="absolute bottom-2.5 end-2.5 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300">
+              <Button
+                size="sm"
+                className="h-9 w-9 p-0 rounded-full bg-gold hover:bg-gold/90 text-white shadow-lg shadow-gold/30 border-0"
+                onClick={handleAddToCart}
+                disabled={isAdding}
+              >
+                <ShoppingCart className={`h-4 w-4 ${isAdding ? 'scale-125' : ''} transition-transform`} />
+              </Button>
+            </div>
+          )}
         </div>
+
+        {/* Book Info */}
         <CardContent className="p-3 space-y-1.5">
-          <h3 className="font-heading text-sm font-semibold text-navy line-clamp-2 leading-snug">
+          {/* Genre Tag */}
+          {book.genre && (
+            <span className="text-[10px] font-medium text-gold/80 tracking-wide uppercase">
+              {getGenreLabel(book.genre, language)}
+            </span>
+          )}
+
+          {/* Title */}
+          <h3 className="font-heading text-sm font-semibold text-navy line-clamp-2 leading-snug group-hover:text-gold transition-colors duration-200">
             {book.title}
           </h3>
+
+          {/* Author */}
           <p className="text-xs text-muted-foreground line-clamp-1">
             {book.author}
           </p>
-          {book.genre && (
-            <span className="text-[10px] text-muted-foreground truncate">
-              {genreLabels[book.genre]?.[language] || genreLabels[book.genre]?.fr || book.genre}
-            </span>
-          )}
-          <div className="flex items-center justify-between pt-1">
-            <span className="text-base font-bold text-gold">
-              {book.priceSale ? `${book.priceSale.toLocaleString()} ${t('common.da')}` : '—'}
+
+          {/* Price & Action */}
+          <div className="flex items-center justify-between pt-1.5 border-t border-border/30">
+            <span className="text-sm font-bold text-navy">
+              {book.priceSale ? `${book.priceSale.toLocaleString()} ` : ''}
+              <span className="text-xs font-medium text-gold">{t('common.da')}</span>
             </span>
             <Button
               size="sm"
               variant="outline"
-              className="h-8 w-8 p-0 rounded-full border-gold/40 text-gold hover:bg-gold hover:text-white transition-colors"
+              className="h-7 w-7 p-0 rounded-full border-gold/30 text-gold hover:bg-gold hover:text-white transition-colors"
               onClick={handleAddToCart}
               disabled={!book.isAvailable || !book.priceSale || isAdding}
             >
-              <ShoppingCart className={`h-3.5 w-3.5 ${isAdding ? 'scale-125' : ''} transition-transform`} />
+              <ShoppingCart className={`h-3 w-3 ${isAdding ? 'scale-125' : ''} transition-transform`} />
             </Button>
           </div>
         </CardContent>

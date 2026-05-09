@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   BookOpen, Printer, Award, Library, Truck,
-  ArrowRight, Sparkles, Info, Tag
+  ArrowRight, Sparkles, Info, Tag, ChevronRight
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useRouterStore } from '@/stores/router-store'
 import { useTranslation } from '@/lib/i18n'
 import { BookCard, type BookData } from './book-card'
+import { getGenreLabel, getGenreIcon, getGenreColor } from '@/lib/genre-utils'
 
 interface CategoryCard {
   slug: string
@@ -74,32 +75,17 @@ const fadeUp = {
   }),
 }
 
-const genreLabels: Record<string, { fr: string; ar: string; en: string; icon: string }> = {
-  roman: { fr: 'Roman', ar: 'رواية', en: 'Fiction', icon: '📚' },
-  histoire: { fr: 'Histoire', ar: 'تاريخ', en: 'History', icon: '🏛️' },
-  sciences: { fr: 'Sciences', ar: 'علوم', en: 'Science', icon: '🔬' },
-  philosophie: { fr: 'Philosophie', ar: 'فلسفة', en: 'Philosophy', icon: '💭' },
-  religion: { fr: 'Religion', ar: 'دين', en: 'Religion', icon: '🕌' },
-  poesie: { fr: 'Poésie', ar: 'شعر', en: 'Poetry', icon: '✍️' },
-  enfants: { fr: 'Enfants', ar: 'أطفال', en: 'Children', icon: '🧒' },
-  biographie: { fr: 'Biographie', ar: 'سيرة', en: 'Biography', icon: '👤' },
-  education: { fr: 'Éducation', ar: 'تعليم', en: 'Education', icon: '🎓' },
-  politique: { fr: 'Politique', ar: 'سياسة', en: 'Politics', icon: '⚖️' },
-  art: { fr: 'Art', ar: 'فن', en: 'Art', icon: '🎨' },
-  economie: { fr: 'Économie', ar: 'اقتصاد', en: 'Economics', icon: '📊' },
-  droit: { fr: 'Droit', ar: 'قانون', en: 'Law', icon: '📜' },
-  medecine: { fr: 'Médecine', ar: 'طب', en: 'Medicine', icon: '🏥' },
-  psychologie: { fr: 'Psychologie', ar: 'علم نفس', en: 'Psychology', icon: '🧠' },
-  informatique: { fr: 'Informatique', ar: 'حاسوب', en: 'Computers', icon: '💻' },
-  sociologie: { fr: 'Sociologie', ar: 'علم اجتماع', en: 'Sociology', icon: '👥' },
-  lettres: { fr: 'Lettres', ar: 'أدب', en: 'Literature', icon: '📖' },
+interface GenreWithBooks {
+  genre: string
+  count: number
+  books: BookData[]
 }
 
 export function HomePage() {
   const { t, language } = useTranslation()
   const navigate = useRouterStore((s) => s.navigate)
   const [featuredBooks, setFeaturedBooks] = useState<BookData[]>([])
-  const [genres, setGenres] = useState<Array<{ genre: string; count: number }>>([])
+  const [genresWithBooks, setGenresWithBooks] = useState<GenreWithBooks[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -109,13 +95,31 @@ export function HomePage() {
           fetch('/api/books?limit=8'),
           fetch('/api/books/genres'),
         ])
+        let books: BookData[] = []
         if (booksRes.ok) {
           const data = await booksRes.json()
-          setFeaturedBooks(data.books || [])
+          books = data.books || []
+          setFeaturedBooks(books)
         }
+
         if (genresRes.ok) {
           const data = await genresRes.json()
-          setGenres((data.genres || []).slice(0, 8))
+          const topGenres = (data.genres || []).slice(0, 6)
+
+          // Fetch 4 books per genre for preview
+          const genreData: GenreWithBooks[] = []
+          await Promise.all(
+            topGenres.map(async (g: { genre: string; count: number }) => {
+              try {
+                const res = await fetch(`/api/books?genre=${g.genre}&limit=4`)
+                if (res.ok) {
+                  const bd = await res.json()
+                  genreData.push({ genre: g.genre, count: g.count, books: (bd.books || []).slice(0, 4) })
+                }
+              } catch { /* skip */ }
+            })
+          )
+          setGenresWithBooks(genreData)
         }
       } catch {
         // silently handle
@@ -136,14 +140,6 @@ export function HomePage() {
     if (language === 'ar') return cat.descAr
     if (language === 'en') return cat.descEn
     return cat.descFr
-  }
-
-  const getGenreLabel = (slug: string) => {
-    return genreLabels[slug]?.[language] || genreLabels[slug]?.fr || slug
-  }
-
-  const getGenreIcon = (slug: string) => {
-    return genreLabels[slug]?.icon || '📖'
   }
 
   const browseByGenreTitle = language === 'ar' ? 'تصفح حسب النوع' : language === 'en' ? 'Browse by Genre' : 'Parcourir par genre'
@@ -189,14 +185,25 @@ export function HomePage() {
               <p className="text-lg sm:text-xl text-white/70 mb-8 leading-relaxed">
                 {t('home.heroSubtitle')}
               </p>
-              <Button
-                size="lg"
-                onClick={() => navigate('catalog')}
-                className="bg-gold hover:bg-gold/90 text-white font-semibold px-8 h-12 text-base rounded-xl shadow-lg shadow-gold/25"
-              >
-                {t('home.exploreCatalog')}
-                <ArrowRight className="ms-2 h-5 w-5 rtl-flip" />
-              </Button>
+              <div className="flex items-center justify-center gap-3 flex-wrap">
+                <Button
+                  size="lg"
+                  onClick={() => navigate('catalog')}
+                  className="bg-gold hover:bg-gold/90 text-white font-semibold px-8 h-12 text-base rounded-xl shadow-lg shadow-gold/25"
+                >
+                  {t('home.exploreCatalog')}
+                  <ArrowRight className="ms-2 h-5 w-5 rtl-flip" />
+                </Button>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  onClick={() => navigate('genres')}
+                  className="border-white/20 text-white hover:bg-white/10 font-semibold px-8 h-12 text-base rounded-xl"
+                >
+                  <Tag className="me-2 h-5 w-5" />
+                  {browseByGenreTitle}
+                </Button>
+              </div>
             </motion.div>
           </div>
         </div>
@@ -273,7 +280,7 @@ export function HomePage() {
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
               {Array.from({ length: 8 }).map((_, i) => (
                 <div key={i} className="space-y-3">
-                  <Skeleton className="aspect-[3/4] w-full rounded-lg" />
+                  <Skeleton className="aspect-[3/4] w-full rounded-xl" />
                   <Skeleton className="h-4 w-3/4" />
                   <Skeleton className="h-3 w-1/2" />
                   <Skeleton className="h-4 w-1/3" />
@@ -295,8 +302,8 @@ export function HomePage() {
         </div>
       </section>
 
-      {/* Browse by Genre */}
-      {genres.length > 0 && (
+      {/* Browse by Genre - with actual book previews */}
+      {!loading && genresWithBooks.length > 0 && (
       <section className="py-12 sm:py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <motion.div
@@ -309,37 +316,74 @@ export function HomePage() {
               <Tag className="h-4 w-4" />
               {browseByGenreTitle}
             </div>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground mb-6">
               {browseByGenreDesc}
             </p>
+            <Button
+              variant="link"
+              onClick={() => navigate('genres')}
+              className="text-gold hover:text-gold/80 p-0"
+            >
+              {language === 'ar' ? 'عرض جميع الأنواع' : language === 'en' ? 'View all genres' : 'Voir tous les genres'}
+              <ChevronRight className="ms-1 h-4 w-4 rtl-flip" />
+            </Button>
           </motion.div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-            {genres.map((g, i) => (
+
+          <div className="space-y-10">
+            {genresWithBooks.map((group, idx) => (
               <motion.div
-                key={g.genre}
-                custom={i}
+                key={group.genre}
+                custom={idx}
                 variants={fadeUp}
                 initial="hidden"
                 whileInView="visible"
                 viewport={{ once: true, margin: '-30px' }}
               >
-                <Card
-                  className="cursor-pointer group overflow-hidden border-border/50 hover:border-gold/40 hover:shadow-lg transition-all duration-300"
-                  onClick={() => navigate('catalog', { genre: g.genre })}
+                {/* Genre Header */}
+                <div
+                  className="flex items-center justify-between mb-4 cursor-pointer group"
+                  onClick={() => navigate('genres', { genre: group.genre })}
                 >
-                  <CardContent className="p-4 flex items-center gap-3">
-                    <span className="text-2xl">{getGenreIcon(g.genre)}</span>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="font-heading text-sm font-semibold text-navy truncate group-hover:text-gold transition-colors">
-                        {getGenreLabel(g.genre)}
-                      </h3>
-                      <p className="text-xs text-muted-foreground">
-                        {g.count} {t('catalog.books')}
-                      </p>
+                  <div className="flex items-center gap-3">
+                    <div className={`flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br ${getGenreColor(group.genre)} text-white shadow-sm`}>
+                      <span className="text-xl">{getGenreIcon(group.genre)}</span>
                     </div>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-gold transition-colors rtl-flip shrink-0" />
-                  </CardContent>
-                </Card>
+                    <h3 className="font-heading text-lg font-bold text-navy group-hover:text-gold transition-colors">
+                      {getGenreLabel(group.genre, language)}
+                    </h3>
+                    <span className="text-xs text-muted-foreground bg-beige px-2 py-0.5 rounded-full">
+                      {group.count}
+                    </span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground hover:text-gold text-xs"
+                  >
+                    {language === 'ar' ? 'المزيد' : language === 'en' ? 'More' : 'Plus'}
+                    <ChevronRight className="ms-1 h-3.5 w-3.5 rtl-flip" />
+                  </Button>
+                </div>
+
+                {/* Books Preview */}
+                {group.books.length > 0 ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {group.books.map((book) => (
+                      <BookCard key={book.id} book={book} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-6 bg-beige/20 rounded-xl border border-dashed border-border/30">
+                    <p className="text-sm text-muted-foreground">
+                      {language === 'ar' ? 'لا توجد كتب' : language === 'en' ? 'No books yet' : 'Aucun livre'}
+                    </p>
+                  </div>
+                )}
+
+                {/* Divider */}
+                {idx < genresWithBooks.length - 1 && (
+                  <div className="mt-10 h-px bg-gradient-to-r from-transparent via-border/50 to-transparent" />
+                )}
               </motion.div>
             ))}
           </div>
@@ -347,8 +391,8 @@ export function HomePage() {
       </section>
       )}
 
-      {/* Why Kitabi */}
-      <section className="py-12 sm:py-16">
+      {/* Why Kitibi */}
+      <section className="py-12 sm:py-16 bg-beige/40">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <motion.div
             initial="hidden"
@@ -370,7 +414,7 @@ export function HomePage() {
                 whileInView="visible"
                 viewport={{ once: true, margin: '-30px' }}
               >
-                <Card className="h-full border-border/50 text-center hover:shadow-lg transition-shadow">
+                <Card className="h-full border-border/50 text-center hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
                   <CardContent className="p-6 space-y-3">
                     <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-gold/10">
                       {feature.icon}
@@ -390,7 +434,7 @@ export function HomePage() {
       </section>
 
       {/* How It Works */}
-      <section className="py-12 sm:py-16 bg-beige/40">
+      <section className="py-12 sm:py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <motion.div
             initial="hidden"
@@ -433,7 +477,7 @@ export function HomePage() {
       </section>
 
       {/* Print on Demand Notice */}
-      <section className="py-12 sm:py-16">
+      <section className="py-12 sm:py-16 bg-beige/40">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <Card className="border-gold/30 bg-gradient-to-r from-gold/5 to-transparent">
             <CardContent className="p-6 sm:p-8 flex flex-col sm:flex-row items-start gap-4">

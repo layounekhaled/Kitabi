@@ -5,6 +5,7 @@ import { Header } from '@/components/client/header'
 import { Footer } from '@/components/client/footer'
 import { HomePage } from '@/components/client/home-page'
 import { CatalogPage } from '@/components/client/catalog-page'
+import { GenresPage } from '@/components/client/genres-page'
 import { BookDetailPage } from '@/components/client/book-detail-page'
 import { CartPage } from '@/components/client/cart-page'
 import { CheckoutPage } from '@/components/client/checkout-page'
@@ -76,6 +77,8 @@ export default function Home() {
         return <HomePage />
       case 'catalog':
         return <CatalogPage />
+      case 'genres':
+        return <GenresPage />
       case 'bookDetail':
         return <BookDetailPage />
       case 'cart':
