@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Menu, ShoppingCart, Globe, ChevronDown, X, BookOpen } from 'lucide-react'
+import { Menu, ShoppingCart, Globe, ChevronDown, BookOpen, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -70,11 +70,13 @@ export function Header() {
           {/* Logo */}
           <button
             onClick={() => handleNavClick('home')}
-            className="flex items-center gap-2 group"
+            className="flex items-center gap-2.5 group"
           >
-            <BookOpen className="h-7 w-7 text-gold transition-transform group-hover:scale-110" />
-            <span className="font-heading text-2xl font-bold text-gold tracking-wide">
-              Kitabi
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gold/15">
+              <BookOpen className="h-5 w-5 text-gold transition-transform group-hover:scale-110" />
+            </div>
+            <span className="font-heading text-xl sm:text-2xl font-bold text-gold tracking-wide">
+              Kitibi
             </span>
           </button>
 
@@ -96,7 +98,17 @@ export function Header() {
           </nav>
 
           {/* Right Section */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            {/* Search icon (navigates to catalog) */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="hidden sm:flex text-white/80 hover:text-white hover:bg-white/10 h-9 w-9 p-0"
+              onClick={() => handleNavClick('catalog')}
+            >
+              <Search className="h-4 w-4" />
+            </Button>
+
             {/* Language Switcher */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -155,16 +167,16 @@ export function Header() {
               <SheetContent side="end" className="w-72 bg-navy border-navy-light">
                 <SheetHeader>
                   <SheetTitle className="flex items-center gap-2 text-gold">
-                    <BookOpen className="h-6 w-6" />
-                    <span className="font-heading text-xl font-bold">Kitabi</span>
+                    <BookOpen className="h-5 w-5" />
+                    <span className="font-heading text-lg font-bold">Kitibi</span>
                   </SheetTitle>
                 </SheetHeader>
-                <nav className="mt-8 flex flex-col gap-1">
+                <nav className="mt-6 flex flex-col gap-0.5">
                   {navLinks.map((link) => (
                     <SheetClose asChild key={link.page}>
                       <button
                         onClick={() => handleNavClick(link.page)}
-                        className={`w-full text-start px-4 py-3 rounded-lg text-base font-medium transition-colors ${
+                        className={`w-full text-start px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
                           currentPage === link.page
                             ? 'bg-white/15 text-white'
                             : 'text-white/80 hover:text-white hover:bg-white/10'
@@ -177,9 +189,9 @@ export function Header() {
                   <SheetClose asChild>
                     <button
                       onClick={() => handleNavClick('cart')}
-                      className="w-full text-start px-4 py-3 rounded-lg text-base font-medium text-white/80 hover:text-white hover:bg-white/10 flex items-center gap-3 transition-colors"
+                      className="w-full text-start px-4 py-3 rounded-xl text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 flex items-center gap-3 transition-colors"
                     >
-                      <ShoppingCart className="h-5 w-5" />
+                      <ShoppingCart className="h-4 w-4" />
                       {t('nav.cart')}
                       {totalItems > 0 && (
                         <Badge className="bg-gold text-white text-[10px] font-bold border-0">
@@ -188,7 +200,7 @@ export function Header() {
                       )}
                     </button>
                   </SheetClose>
-                  <div className="my-4 border-t border-white/10" />
+                  <div className="my-3 border-t border-white/10" />
                   <div className="px-4 py-2 text-xs text-white/50 font-medium uppercase tracking-wider">
                     {t('nav.language')}
                   </div>
@@ -199,7 +211,7 @@ export function Header() {
                         setLanguage(lang.code)
                         setIsMobileMenuOpen(false)
                       }}
-                      className={`w-full text-start px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                      className={`w-full text-start px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${
                         language === lang.code
                           ? 'bg-white/15 text-white'
                           : 'text-white/70 hover:text-white hover:bg-white/10'

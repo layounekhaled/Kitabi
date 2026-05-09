@@ -1,15 +1,24 @@
 import { db } from '@/lib/db'
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url)
+    const language = searchParams.get('language') || undefined
+
+    const where: Record<string, unknown> = {
+      genre: { not: null },
+      isPublished: true,
+      isDraft: false,
+    }
+
+    if (language) {
+      where.language = language
+    }
+
     const genreCounts = await db.book.groupBy({
       by: ['genre'],
-      where: {
-        genre: { not: null },
-        isPublished: true,
-        isDraft: false,
-      },
+      where,
       _count: { genre: true },
     })
 

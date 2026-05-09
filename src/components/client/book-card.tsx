@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { ShoppingCart, BookOpen } from 'lucide-react'
+import { ShoppingCart, BookOpen, Star } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -35,9 +35,9 @@ const languageLabels: Record<string, string> = {
 }
 
 const languageColors: Record<string, string> = {
-  fr: 'bg-blue-500/90 text-white',
-  ar: 'bg-emerald-500/90 text-white',
-  en: 'bg-amber-500/90 text-white',
+  fr: 'bg-blue-500 text-white',
+  ar: 'bg-emerald-600 text-white',
+  en: 'bg-amber-500 text-white',
 }
 
 export function BookCard({ book }: BookCardProps) {
@@ -71,11 +71,11 @@ export function BookCard({ book }: BookCardProps) {
       transition={{ duration: 0.2 }}
     >
       <Card
-        className="group cursor-pointer overflow-hidden border border-border/40 shadow-sm hover:shadow-xl rounded-xl transition-all duration-300 bg-white"
+        className="group cursor-pointer overflow-hidden border border-border/30 shadow-sm hover:shadow-xl rounded-2xl transition-all duration-300 bg-white h-full flex flex-col"
         onClick={handleCardClick}
       >
         {/* Cover Image */}
-        <div className="relative aspect-[3/4] overflow-hidden bg-gradient-to-br from-beige to-beige/60">
+        <div className="relative aspect-[3/4] overflow-hidden bg-gradient-to-br from-gray-100 to-gray-50">
           {book.coverUrl ? (
             <>
               <img
@@ -84,12 +84,26 @@ export function BookCard({ book }: BookCardProps) {
                 className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                 loading="lazy"
               />
-              {/* Subtle gradient overlay at bottom */}
-              <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              {/* Gradient overlay at bottom */}
+              <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+
+              {/* Hover cart button on image */}
+              {book.isAvailable && book.priceSale && (
+                <div className="absolute bottom-3 end-3 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300">
+                  <Button
+                    size="sm"
+                    className={`h-10 w-10 p-0 rounded-full bg-gold hover:bg-gold/90 text-white shadow-lg shadow-gold/30 border-0 ${isAdding ? 'scale-110' : ''} transition-transform`}
+                    onClick={handleAddToCart}
+                    disabled={isAdding}
+                  >
+                    <ShoppingCart className={`h-4 w-4 ${isAdding ? 'scale-125' : ''} transition-transform`} />
+                  </Button>
+                </div>
+              )}
             </>
           ) : (
             <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-navy/5">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-navy/5">
                 <BookOpen className="h-8 w-8 text-navy/20" />
               </div>
               <span className="text-center text-xs text-muted-foreground/70 line-clamp-2 font-medium">
@@ -98,12 +112,21 @@ export function BookCard({ book }: BookCardProps) {
             </div>
           )}
 
-          {/* Language Badge */}
+          {/* Language Badge - top left */}
           {book.language && (
             <Badge
-              className={`absolute top-2.5 start-2.5 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md backdrop-blur-sm ${languageColors[book.language] || 'bg-gray-500/90 text-white'}`}
+              className={`absolute top-2.5 start-2.5 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md shadow-sm ${languageColors[book.language] || 'bg-gray-500 text-white'}`}
             >
               {languageLabels[book.language] || book.language}
+            </Badge>
+          )}
+
+          {/* Genre tag - top right */}
+          {book.genre && (
+            <Badge
+              className="absolute top-2.5 end-2.5 text-[9px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-md bg-white/90 text-navy backdrop-blur-sm shadow-sm border border-border/20"
+            >
+              {getGenreLabel(book.genre, language)}
             </Badge>
           )}
 
@@ -115,33 +138,12 @@ export function BookCard({ book }: BookCardProps) {
               </Badge>
             </div>
           )}
-
-          {/* Quick Add to Cart (shows on hover) */}
-          {book.isAvailable && book.priceSale && (
-            <div className="absolute bottom-2.5 end-2.5 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300">
-              <Button
-                size="sm"
-                className="h-9 w-9 p-0 rounded-full bg-gold hover:bg-gold/90 text-white shadow-lg shadow-gold/30 border-0"
-                onClick={handleAddToCart}
-                disabled={isAdding}
-              >
-                <ShoppingCart className={`h-4 w-4 ${isAdding ? 'scale-125' : ''} transition-transform`} />
-              </Button>
-            </div>
-          )}
         </div>
 
         {/* Book Info */}
-        <CardContent className="p-3 space-y-1.5">
-          {/* Genre Tag */}
-          {book.genre && (
-            <span className="text-[10px] font-medium text-gold/80 tracking-wide uppercase">
-              {getGenreLabel(book.genre, language)}
-            </span>
-          )}
-
+        <CardContent className="p-3.5 space-y-1.5 flex-1 flex flex-col justify-end">
           {/* Title */}
-          <h3 className="font-heading text-sm font-semibold text-navy line-clamp-2 leading-snug group-hover:text-gold transition-colors duration-200">
+          <h3 className="font-heading text-sm font-semibold text-navy line-clamp-2 leading-snug group-hover:text-gold transition-colors duration-200 min-h-[2.5rem]">
             {book.title}
           </h3>
 
@@ -150,11 +152,11 @@ export function BookCard({ book }: BookCardProps) {
             {book.author}
           </p>
 
-          {/* Price & Action */}
-          <div className="flex items-center justify-between pt-1.5 border-t border-border/30">
-            <span className="text-sm font-bold text-navy">
-              {book.priceSale ? `${book.priceSale.toLocaleString()} ` : ''}
-              <span className="text-xs font-medium text-gold">{t('common.da')}</span>
+          {/* Price */}
+          <div className="flex items-center justify-between pt-2 border-t border-border/20 mt-auto">
+            <span className="text-base font-bold text-navy">
+              {book.priceSale ? `${book.priceSale.toLocaleString()} ` : '—'}
+              <span className="text-[10px] font-semibold text-gold">{t('common.da')}</span>
             </span>
             <Button
               size="sm"

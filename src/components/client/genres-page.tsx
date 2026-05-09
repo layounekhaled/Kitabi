@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowRight, BookOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -27,56 +27,74 @@ const fadeUp = {
   }),
 }
 
+const langFilters = [
+  { code: '', flag: '🌍', labelFr: 'Toutes', labelAr: 'الكل', labelEn: 'All' },
+  { code: 'ar', flag: '🇩🇿', labelFr: 'Arabe', labelAr: 'عربي', labelEn: 'Arabic' },
+  { code: 'fr', flag: '🇫🇷', labelFr: 'Français', labelAr: 'فرنسي', labelEn: 'French' },
+  { code: 'en', flag: '🇬🇧', labelFr: 'Anglais', labelAr: 'إنجليزي', labelEn: 'English' },
+]
+
 export function GenresPage() {
   const { t, language } = useTranslation()
   const navigate = useRouterStore((s) => s.navigate)
   const [genreGroups, setGenreGroups] = useState<GenreGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedGenre, setExpandedGenre] = useState<string | null>(null)
+  const [activeLang, setActiveLang] = useState<string>('')
+
+  const fetchData = useCallback(async (lang: string) => {
+    setLoading(true)
+    setExpandedGenre(null)
+    try {
+      const url = lang ? `/api/books/genres?language=${lang}` : '/api/books/genres'
+      const genresRes = await fetch(url)
+      if (!genresRes.ok) return
+      const genresData = await genresRes.json()
+      const genres = (genresData.genres || []).slice(0, 12)
+
+      const groups: GenreGroup[] = []
+      for (const g of genres) {
+        try {
+          const langParam = lang ? `&language=${lang}` : ''
+          const booksRes = await fetch(`/api/books?genre=${g.genre}${langParam}&limit=6`)
+          if (booksRes.ok) {
+            const booksData = await booksRes.json()
+            groups.push({
+              genre: g.genre,
+              count: g.count,
+              books: (booksData.books || []).slice(0, 6),
+            })
+          }
+        } catch { /* skip */ }
+      }
+
+      setGenreGroups(groups)
+    } catch { /* silent */ } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
-    async function fetchData() {
-      try {
-        // Fetch genres list
-        const genresRes = await fetch('/api/books/genres')
-        if (!genresRes.ok) return
-        const genresData = await genresRes.json()
-        const genres = (genresData.genres || []).slice(0, 12)
+    fetchData(activeLang)
+  }, [activeLang, fetchData])
 
-        // Fetch books for each genre (4 books per genre for preview)
-        const groups: GenreGroup[] = []
-        for (const g of genres) {
-          try {
-            const booksRes = await fetch(`/api/books?genre=${g.genre}&limit=6`)
-            if (booksRes.ok) {
-              const booksData = await booksRes.json()
-              groups.push({
-                genre: g.genre,
-                count: g.count,
-                books: (booksData.books || []).slice(0, 6),
-              })
-            }
-          } catch {
-            // skip genre on error
-          }
-        }
-
-        setGenreGroups(groups)
-      } catch {
-        // silently handle
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchData()
-  }, [])
+  const getLangLabel = (lf: typeof langFilters[0]) => {
+    if (language === 'ar') return lf.labelAr
+    if (language === 'en') return lf.labelEn
+    return lf.labelFr
+  }
 
   if (loading) {
     return (
       <div className="animate-fade-in">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
           <Skeleton className="h-10 w-64 mb-3" />
-          <Skeleton className="h-5 w-96 mb-10" />
+          <Skeleton className="h-5 w-96 mb-8" />
+          <div className="flex gap-2 mb-10">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-10 w-24 rounded-full" />
+            ))}
+          </div>
           <div className="space-y-10">
             {Array.from({ length: 4 }).map((_, i) => (
               <div key={i}>
@@ -144,11 +162,35 @@ export function GenresPage() {
         </div>
       </div>
 
+      {/* Language Filter Bar */}
+      <div className="sticky top-16 z-30 bg-white/95 backdrop-blur-md border-b border-border/50 shadow-sm">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-3">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+            <span className="text-xs text-muted-foreground font-medium whitespace-nowrap me-1">
+              {language === 'ar' ? 'لغة:' : language === 'en' ? 'Language:' : 'Langue :'}
+            </span>
+            {langFilters.map((lf) => (
+              <button
+                key={lf.code}
+                onClick={() => setActiveLang(lf.code)}
+                className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200 ${
+                  activeLang === lf.code
+                    ? 'bg-navy text-white shadow-sm'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <span>{lf.flag}</span>
+                {getLangLabel(lf)}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {/* Genre Sections */}
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
         <div className="space-y-12 sm:space-y-16">
           {genreGroups.map((group, idx) => {
-            const info = genreLabels[group.genre]
             const isExpanded = expandedGenre === group.genre
             const booksToShow = isExpanded ? group.books : group.books.slice(0, 4)
             const hasMore = group.books.length > 4 || group.count > 4
@@ -186,7 +228,10 @@ export function GenresPage() {
                       size="sm"
                       onClick={(e) => {
                         e.stopPropagation()
-                        navigate('catalog', { genre: group.genre })
+                        navigate('catalog', {
+                          genre: group.genre,
+                          ...(activeLang ? { language: activeLang } : {}),
+                        })
                       }}
                       className="border-gold/30 text-gold hover:bg-gold hover:text-white text-xs"
                     >
@@ -224,7 +269,7 @@ export function GenresPage() {
                   </div>
                 )}
 
-                {/* Divider between sections */}
+                {/* Divider */}
                 {idx < genreGroups.length - 1 && (
                   <div className="mt-12 sm:mt-16 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
                 )}

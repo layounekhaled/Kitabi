@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Search, SlidersHorizontal, X, ChevronLeft, ChevronRight, BookOpen } from 'lucide-react'
+import { Search, SlidersHorizontal, X, ChevronLeft, ChevronRight, BookOpen, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -25,7 +25,7 @@ import { Separator } from '@/components/ui/separator'
 import { useRouterStore } from '@/stores/router-store'
 import { useTranslation } from '@/lib/i18n'
 import { BookCard, type BookData } from './book-card'
-import { getGenreLabel } from '@/lib/genre-utils'
+import { getGenreLabel, getGenreIcon, getGenreColor } from '@/lib/genre-utils'
 
 interface Category {
   id: string
@@ -42,10 +42,10 @@ interface PaginationInfo {
   totalPages: number
 }
 
-const languageOptions = [
-  { value: 'ar', labelFr: 'Arabe', labelAr: 'العربية', labelEn: 'Arabic' },
-  { value: 'fr', labelFr: 'Français', labelAr: 'الفرنسية', labelEn: 'French' },
-  { value: 'en', labelFr: 'Anglais', labelAr: 'الإنجليزية', labelEn: 'English' },
+const langFilters = [
+  { code: 'ar', flag: '🇩🇿', labelFr: 'Arabe', labelAr: 'العربية', labelEn: 'Arabic', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+  { code: 'fr', flag: '🇫🇷', labelFr: 'Français', labelAr: 'الفرنسية', labelEn: 'French', color: 'bg-blue-100 text-blue-700 border-blue-200' },
+  { code: 'en', flag: '🇬🇧', labelFr: 'Anglais', labelAr: 'الإنجليزية', labelEn: 'English', color: 'bg-amber-100 text-amber-700 border-amber-200' },
 ]
 
 export function CatalogPage() {
@@ -76,13 +76,18 @@ export function CatalogPage() {
         setCategories(data.categories || data || [])
       })
       .catch(() => {})
-    fetch('/api/books/genres')
+  }, [])
+
+  // Fetch genres - react to language changes
+  useEffect(() => {
+    const url = selectedLanguage ? `/api/books/genres?language=${selectedLanguage}` : '/api/books/genres'
+    fetch(url)
       .then((res) => res.json())
       .then((data) => {
         setGenres(data.genres || [])
       })
       .catch(() => {})
-  }, [])
+  }, [selectedLanguage])
 
   // Fetch books
   const fetchBooks = useCallback(async () => {
@@ -102,7 +107,6 @@ export function CatalogPage() {
       if (res.ok) {
         const data = await res.json()
         let fetchedBooks = data.books || []
-        // Client-side sorting
         if (sortBy === 'priceLow') {
           fetchedBooks = [...fetchedBooks].sort((a, b) => (a.priceSale || 0) - (b.priceSale || 0))
         } else if (sortBy === 'priceHigh') {
@@ -115,9 +119,7 @@ export function CatalogPage() {
         setBooks(fetchedBooks)
         setPagination(data.pagination || { page, limit: 12, total: 0, totalPages: 0 })
       }
-    } catch {
-      // silently handle
-    } finally {
+    } catch { /* silent */ } finally {
       setLoading(false)
     }
   }, [page, search, selectedCategory, selectedGenre, selectedLanguage, minPrice, maxPrice, sortBy])
@@ -162,10 +164,10 @@ export function CatalogPage() {
     return cat.nameFr
   }
 
-  const getLangLabel = (opt: typeof languageOptions[0]) => {
-    if (language === 'ar') return opt.labelAr
-    if (language === 'en') return opt.labelEn
-    return opt.labelFr
+  const getLangLabel = (lf: typeof langFilters[0]) => {
+    if (language === 'ar') return lf.labelAr
+    if (language === 'en') return lf.labelEn
+    return lf.labelFr
   }
 
   const getGenreLabelFn = (slug: string) => {
@@ -174,6 +176,36 @@ export function CatalogPage() {
 
   const FilterContent = () => (
     <div className="space-y-5">
+      {/* Genre as primary filter */}
+      <div>
+        <label className="text-sm font-medium text-foreground mb-2 block">
+          {t('catalog.genre') || 'Genre'}
+        </label>
+        <div className="space-y-1.5 max-h-60 overflow-y-auto custom-scrollbar">
+          {genres.length > 0 ? genres.map((g) => (
+            <button
+              key={g.genre}
+              onClick={() => { setSelectedGenre(selectedGenre === g.genre ? '' : g.genre); setPage(1) }}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all text-start ${
+                selectedGenre === g.genre
+                  ? 'bg-gold/10 text-gold font-medium border border-gold/20'
+                  : 'text-foreground hover:bg-muted'
+              }`}
+            >
+              <span className="text-base">{getGenreIcon(g.genre)}</span>
+              <span className="flex-1 truncate">{getGenreLabelFn(g.genre)}</span>
+              <span className="text-xs text-muted-foreground">{g.count}</span>
+            </button>
+          )) : (
+            <p className="text-xs text-muted-foreground py-2">
+              {selectedLanguage
+                ? (language === 'ar' ? 'اختر لغة أولاً' : language === 'en' ? 'Select a language first' : 'Sélectionnez une langue d\'abord')
+                : (language === 'ar' ? 'لا توجد أنواع' : language === 'en' ? 'No genres' : 'Aucun genre')}
+            </p>
+          )}
+        </div>
+      </div>
+
       {/* Category */}
       <div>
         <label className="text-sm font-medium text-foreground mb-1.5 block">
@@ -188,46 +220,6 @@ export function CatalogPage() {
             {categories.map((cat) => (
               <SelectItem key={cat.slug} value={cat.slug}>
                 {getCategoryName(cat)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Language */}
-      <div>
-        <label className="text-sm font-medium text-foreground mb-1.5 block">
-          {t('catalog.language')}
-        </label>
-        <Select value={selectedLanguage} onValueChange={(v) => { setSelectedLanguage(v === '__all__' ? '' : v); setPage(1) }}>
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder={t('catalog.allLanguages')} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">{t('catalog.allLanguages')}</SelectItem>
-            {languageOptions.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {getLangLabel(opt)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Genre */}
-      <div>
-        <label className="text-sm font-medium text-foreground mb-1.5 block">
-          {t('catalog.genre') || 'Genre'}
-        </label>
-        <Select value={selectedGenre} onValueChange={(v) => { setSelectedGenre(v === '__all__' ? '' : v); setPage(1) }}>
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder={t('catalog.allGenres') || 'Tous les genres'} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">{t('catalog.allGenres') || 'Tous les genres'}</SelectItem>
-            {genres.map((g) => (
-              <SelectItem key={g.genre} value={g.genre!}>
-                {getGenreLabelFn(g.genre)} ({g.count})
               </SelectItem>
             ))}
           </SelectContent>
@@ -272,126 +264,197 @@ export function CatalogPage() {
 
   return (
     <div className="animate-fade-in">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="font-heading text-2xl sm:text-3xl font-bold text-navy mb-4">
+      {/* ─── Top Language Selector Bar ─── */}
+      <div className="bg-gradient-to-b from-navy to-navy/95 py-8 sm:py-10 relative overflow-hidden">
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-0 start-1/3 w-48 h-48 bg-gold rounded-full blur-3xl" />
+        </div>
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <h1 className="font-heading text-2xl sm:text-3xl font-bold text-white mb-2">
             {t('nav.catalog')}
           </h1>
+          <p className="text-white/60 text-sm mb-5">
+            {language === 'ar'
+              ? 'اختر لغة الكتاب ثم تصفح الأنواع المتاحة'
+              : language === 'en'
+                ? 'Choose the book language, then browse available genres'
+                : 'Choisissez la langue du livre, puis parcourez les genres disponibles'}
+          </p>
 
-          {/* Search & Sort Row */}
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder={t('common.searchPlaceholder')}
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                className="ps-9 h-10"
-              />
-              {searchInput && (
+          {/* Language pills */}
+          <div className="flex flex-wrap gap-2">
+            {langFilters.map((lf) => (
+              <button
+                key={lf.code}
+                onClick={() => {
+                  setSelectedLanguage(selectedLanguage === lf.code ? '' : lf.code)
+                  setSelectedGenre('')
+                  setPage(1)
+                }}
+                className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                  selectedLanguage === lf.code
+                    ? 'bg-white text-navy shadow-md'
+                    : 'bg-white/15 text-white/80 hover:bg-white/25 border border-white/10'
+                }`}
+              >
+                <span>{lf.flag}</span>
+                {getLangLabel(lf)}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Genre Quick-Select Bar (visible when language is selected) ─── */}
+      {selectedLanguage && genres.length > 0 && (
+        <div className="sticky top-16 z-30 bg-white/95 backdrop-blur-md border-b border-border/50 shadow-sm">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-2.5">
+            <div className="flex items-center gap-2 overflow-x-auto pb-0.5">
+              <span className="text-xs text-muted-foreground font-medium whitespace-nowrap me-1">
+                {t('catalog.genre') || 'Genre'}:
+              </span>
+              <button
+                onClick={() => { setSelectedGenre(''); setPage(1) }}
+                className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
+                  !selectedGenre
+                    ? 'bg-navy text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {language === 'ar' ? 'الكل' : language === 'en' ? 'All' : 'Tous'}
+              </button>
+              {genres.slice(0, 10).map((g) => (
                 <button
-                  onClick={() => { setSearchInput(''); setSearch('') }}
-                  className="absolute end-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  key={g.genre}
+                  onClick={() => { setSelectedGenre(selectedGenre === g.genre ? '' : g.genre); setPage(1) }}
+                  className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
+                    selectedGenre === g.genre
+                      ? 'bg-navy text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
                 >
-                  <X className="h-4 w-4" />
+                  <span>{getGenreIcon(g.genre)}</span>
+                  {getGenreLabelFn(g.genre)}
                 </button>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="w-[180px] h-10">
-                  <SelectValue placeholder={t('catalog.sortBy')} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="newest">{t('catalog.sortNewest')}</SelectItem>
-                  <SelectItem value="priceLow">{t('catalog.sortPriceLow')}</SelectItem>
-                  <SelectItem value="priceHigh">{t('catalog.sortPriceHigh')}</SelectItem>
-                  <SelectItem value="titleAZ">{t('catalog.sortTitleAZ')}</SelectItem>
-                  <SelectItem value="titleZA">{t('catalog.sortTitleZA')}</SelectItem>
-                </SelectContent>
-              </Select>
-              {/* Mobile Filter Button */}
-              <Sheet>
-                <SheetTrigger asChild>
-                  <Button variant="outline" size="icon" className="lg:hidden h-10 w-10 relative">
-                    <SlidersHorizontal className="h-4 w-4" />
-                    {activeFilterCount > 0 && (
-                      <Badge className="absolute -top-1.5 -end-1.5 h-5 min-w-5 flex items-center justify-center bg-gold text-white text-[10px] font-bold border-0 px-1">
-                        {activeFilterCount}
-                      </Badge>
-                    )}
-                  </Button>
-                </SheetTrigger>
-                <SheetContent side="end" className="w-80">
-                  <SheetHeader>
-                    <SheetTitle>{t('catalog.filterBy')}</SheetTitle>
-                  </SheetHeader>
-                  <div className="mt-4">
-                    <FilterContent />
-                  </div>
-                </SheetContent>
-              </Sheet>
+              ))}
             </div>
           </div>
+        </div>
+      )}
 
-          {/* Active Filters */}
-          {activeFilterCount > 0 && (
-            <div className="flex flex-wrap items-center gap-2 mt-3">
-              <span className="text-xs text-muted-foreground font-medium">{t('catalog.activeFilters')}:</span>
-              {selectedCategory && (
-                <Badge variant="secondary" className="gap-1">
-                  {categories.find((c) => c.slug === selectedCategory)
-                    ? getCategoryName(categories.find((c) => c.slug === selectedCategory)!)
-                    : selectedCategory}
-                  <button onClick={() => { setSelectedCategory(''); setPage(1) }}>
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              )}
-              {selectedLanguage && (
-                <Badge variant="secondary" className="gap-1">
-                  {getLangLabel(languageOptions.find((o) => o.value === selectedLanguage)!)}
-                  <button onClick={() => { setSelectedLanguage(''); setPage(1) }}>
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              )}
-              {selectedGenre && (
-                <Badge variant="secondary" className="gap-1">
-                  {getGenreLabelFn(selectedGenre)}
-                  <button onClick={() => { setSelectedGenre(''); setPage(1) }}>
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              )}
-              {minPrice && (
-                <Badge variant="secondary" className="gap-1">
-                  {t('catalog.minPrice')}: {minPrice} {t('common.da')}
-                  <button onClick={() => { setMinPrice(''); setPage(1) }}>
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              )}
-              {maxPrice && (
-                <Badge variant="secondary" className="gap-1">
-                  {t('catalog.maxPrice')}: {maxPrice} {t('common.da')}
-                  <button onClick={() => { setMaxPrice(''); setPage(1) }}>
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              )}
+      {/* ─── Main Content ─── */}
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        {/* Search & Sort Row */}
+        <div className="flex flex-col sm:flex-row gap-3 mb-6">
+          <div className="relative flex-1">
+            <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder={t('common.searchPlaceholder')}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="ps-9 h-10"
+            />
+            {searchInput && (
               <button
-                onClick={resetFilters}
-                className="text-xs text-gold hover:text-gold/80 font-medium"
+                onClick={() => { setSearchInput(''); setSearch('') }}
+                className="absolute end-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               >
-                {t('catalog.clearAll')}
+                <X className="h-4 w-4" />
               </button>
-            </div>
-          )}
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Select value={sortBy} onValueChange={setSortBy}>
+              <SelectTrigger className="w-[180px] h-10">
+                <SelectValue placeholder={t('catalog.sortBy')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="newest">{t('catalog.sortNewest')}</SelectItem>
+                <SelectItem value="priceLow">{t('catalog.sortPriceLow')}</SelectItem>
+                <SelectItem value="priceHigh">{t('catalog.sortPriceHigh')}</SelectItem>
+                <SelectItem value="titleAZ">{t('catalog.sortTitleAZ')}</SelectItem>
+                <SelectItem value="titleZA">{t('catalog.sortTitleZA')}</SelectItem>
+              </SelectContent>
+            </Select>
+            {/* Mobile Filter Button */}
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="icon" className="lg:hidden h-10 w-10 relative">
+                  <SlidersHorizontal className="h-4 w-4" />
+                  {activeFilterCount > 0 && (
+                    <Badge className="absolute -top-1.5 -end-1.5 h-5 min-w-5 flex items-center justify-center bg-gold text-white text-[10px] font-bold border-0 px-1">
+                      {activeFilterCount}
+                    </Badge>
+                  )}
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="end" className="w-80">
+                <SheetHeader>
+                  <SheetTitle>{t('catalog.filterBy')}</SheetTitle>
+                </SheetHeader>
+                <div className="mt-4">
+                  <FilterContent />
+                </div>
+              </SheetContent>
+            </Sheet>
+          </div>
         </div>
 
-        {/* Main Content */}
+        {/* Active Filters */}
+        {activeFilterCount > 0 && (
+          <div className="flex flex-wrap items-center gap-2 mb-5">
+            <span className="text-xs text-muted-foreground font-medium">{t('catalog.activeFilters')}:</span>
+            {selectedLanguage && (
+              <Badge variant="secondary" className="gap-1">
+                {langFilters.find((l) => l.code === selectedLanguage)?.flag} {getLangLabel(langFilters.find((l) => l.code === selectedLanguage)!)}
+                <button onClick={() => { setSelectedLanguage(''); setSelectedGenre(''); setPage(1) }}>
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
+            {selectedGenre && (
+              <Badge variant="secondary" className="gap-1">
+                {getGenreIcon(selectedGenre)} {getGenreLabelFn(selectedGenre)}
+                <button onClick={() => { setSelectedGenre(''); setPage(1) }}>
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
+            {selectedCategory && (
+              <Badge variant="secondary" className="gap-1">
+                {categories.find((c) => c.slug === selectedCategory)
+                  ? getCategoryName(categories.find((c) => c.slug === selectedCategory)!)
+                  : selectedCategory}
+                <button onClick={() => { setSelectedCategory(''); setPage(1) }}>
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
+            {minPrice && (
+              <Badge variant="secondary" className="gap-1">
+                {t('catalog.minPrice')}: {minPrice} {t('common.da')}
+                <button onClick={() => { setMinPrice(''); setPage(1) }}>
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
+            {maxPrice && (
+              <Badge variant="secondary" className="gap-1">
+                {t('catalog.maxPrice')}: {maxPrice} {t('common.da')}
+                <button onClick={() => { setMaxPrice(''); setPage(1) }}>
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
+            <button
+              onClick={resetFilters}
+              className="text-xs text-gold hover:text-gold/80 font-medium"
+            >
+              {t('catalog.clearAll')}
+            </button>
+          </div>
+        )}
+
         <div className="flex gap-8">
           {/* Desktop Sidebar */}
           <aside className="hidden lg:block w-64 shrink-0">
@@ -440,6 +503,13 @@ export function CatalogPage() {
                 <BookOpen className="h-16 w-16 mx-auto mb-4 text-muted-foreground/30" />
                 <p className="text-lg font-medium text-muted-foreground">
                   {t('catalog.noResults')}
+                </p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {language === 'ar'
+                    ? 'جرب تغيير اللغة أو النوع للعثور على كتب'
+                    : language === 'en'
+                      ? 'Try changing the language or genre to find books'
+                      : 'Essayez de changer la langue ou le genre pour trouver des livres'}
                 </p>
                 <Button
                   variant="outline"
