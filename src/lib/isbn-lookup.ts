@@ -158,6 +158,7 @@ export interface LookupResult {
   isbn: string
   categories: string[]
   suggestedCategorySlug: string
+  genre: string | null
   source: string
 }
 
@@ -259,6 +260,43 @@ function normalizeLanguage(lang: string | undefined): string {
   }
   if (langMap[lower]) return langMap[lower]
   return 'fr'
+}
+
+export function classifyGenre(categories: string[]): string | null {
+  if (!categories || categories.length === 0) return null
+  const allText = categories.join(' ').toLowerCase()
+
+  // Check each genre mapping
+  const genreMappings: Array<{ slug: string; keywords: string[] }> = [
+    { slug: 'roman', keywords: ['fiction', 'novel', 'roman', 'romans', 'رواية', 'روايات', 'contes', 'nouvelles', 'récits', 'literary fiction', 'thriller', 'policier', 'mystery', 'suspense', 'fantasy', 'science fiction', 'science-fiction', 'aventure', 'adventure', 'romance', 'amour', 'drame', 'drama', 'comedie', 'humour', 'satire', 'parodie'] },
+    { slug: 'histoire', keywords: ['history', 'histoire', 'تاريخ', 'historical', 'antiquité', 'moyen âge', 'guerre', 'war'] },
+    { slug: 'sciences', keywords: ['science', 'sciences', 'علوم', 'mathematics', 'mathématiques', 'physique', 'physics', 'chimie', 'chemistry', 'biologie', 'biology', 'nature', 'astronomy', 'astronomie', 'géologie', 'engineering', 'ingénierie'] },
+    { slug: 'philosophie', keywords: ['philosophy', 'philosophie', 'فلسفة', 'philosophique', 'éthique', 'ethics', 'métaphysique', 'épistémologie'] },
+    { slug: 'religion', keywords: ['religion', 'religions', 'دين', 'islam', 'christianity', 'christianisme', 'judaïsme', 'judaism', 'spirituality', 'spiritualité', 'torah', 'coran', 'quran', 'bible', 'fiqh', 'tafsir', 'hadith', 'sunnah'] },
+    { slug: 'poesie', keywords: ['poetry', 'poésie', 'شعر', 'poèmes', 'poems', 'verse'] },
+    { slug: 'enfants', keywords: ['children', 'jeunesse', 'أطفال', 'enfant', 'kids', 'young adult', 'adolescent', 'juvenile', 'picture book', 'livre enfant'] },
+    { slug: 'biographie', keywords: ['biography', 'biographie', 'سيرة', 'autobiography', 'autobiographie', 'mémoires', 'memoirs', 'journal', 'diary'] },
+    { slug: 'education', keywords: ['education', 'éducation', 'تعليم', 'pedagogy', 'pédagogie', 'teaching', 'enseignement', 'scolaire', 'school', 'universitaire', 'academic', 'étude', 'études'] },
+    { slug: 'politique', keywords: ['politics', 'politique', 'سياسة', 'political science', 'sciences politiques', 'government', 'gouvernement', 'democracy', 'démocratie', 'diplomacy'] },
+    { slug: 'art', keywords: ['art', 'arts', 'فن', 'music', 'musique', 'cinema', 'cinéma', 'théâtre', 'theater', 'photography', 'photographie', 'architecture', 'design', 'peinture', 'sculpture', 'dessin'] },
+    { slug: 'economie', keywords: ['economics', 'économie', 'اقتصاد', 'business', 'finance', 'management', 'marketing', 'comptabilité', 'accounting', 'entrepreneuriat', 'commerce', 'trade', 'investissement'] },
+    { slug: 'droit', keywords: ['law', 'droit', 'قانون', 'juridique', 'legal', 'justice', 'حقوق', 'legislation', 'réglementation'] },
+    { slug: 'medecine', keywords: ['medicine', 'médecine', 'طب', 'health', 'santé', 'medical', 'pharmacology', 'pharmacologie', 'nursing', 'soins infirmiers', 'dentistry'] },
+    { slug: 'psychologie', keywords: ['psychology', 'psychologie', 'علم نفس', 'psychiatric', 'psychiatrie', 'psychotherapy', 'psychanalyse', 'mental health', 'santé mentale'] },
+    { slug: 'informatique', keywords: ['computers', 'informatique', 'حاسوب', 'computer science', 'programming', 'programmation', 'software', 'logiciel', 'internet', 'digital', 'numérique', 'algorithm', 'intelligence artificielle', 'artificial intelligence', 'data', 'machine learning', 'réseaux'] },
+    { slug: 'sociologie', keywords: ['sociology', 'sociologie', 'علم اجتماع', 'anthropology', 'anthropologie', 'social', 'sociale', 'culture', 'cultural'] },
+    { slug: 'lettres', keywords: ['literature', 'littérature', 'أدب', 'literary criticism', 'critique littéraire', 'essais', 'essays', 'linguistics', 'linguistique', 'langue', 'language', 'grammar', 'grammaire'] },
+  ]
+
+  for (const mapping of genreMappings) {
+    for (const keyword of mapping.keywords) {
+      if (allText.includes(keyword)) {
+        return mapping.slug
+      }
+    }
+  }
+
+  return null
 }
 
 function suggestCategory(language: string): string {
@@ -373,6 +411,7 @@ function buildGoogleBooksResult(volumeInfo: GoogleBookVolumeInfo, isbn: string):
     isbn: normalizedIsbn,
     categories: volumeInfo.categories || [],
     suggestedCategorySlug: suggestCategory(language),
+    genre: null,
     source: 'google',
   }
 }
@@ -429,6 +468,7 @@ async function lookupOpenLibrary(isbn: string): Promise<LookupResult | null> {
       isbn: normalizedIsbn,
       categories,
       suggestedCategorySlug: suggestCategory(language),
+    genre: null,
       source: 'openlibrary',
     }
   } catch (error) {
@@ -522,6 +562,7 @@ async function lookupOpenLibraryDirect(isbn: string): Promise<LookupResult | nul
       isbn: normalizedIsbn,
       categories,
       suggestedCategorySlug: suggestCategory(language),
+    genre: null,
       source: 'openlibrary-direct',
     }
   } catch (error) {
@@ -596,6 +637,7 @@ async function lookupOpenLibrarySearch(isbn: string): Promise<LookupResult | nul
       isbn: normalizedIsbn,
       categories: [],
       suggestedCategorySlug: suggestCategory(language),
+    genre: null,
       source: 'openlibrary-search',
     }
   } catch (error) {
@@ -731,6 +773,7 @@ async function lookupBNFByIsbn(searchIsbn: string, normalizedIsbn: string): Prom
     isbn: normalizedIsbn,
     categories,
     suggestedCategorySlug: suggestCategory(language),
+    genre: null,
     source: 'bnf',
   }
 }
@@ -839,6 +882,7 @@ function buildCrossrefResult(item: CrossrefWorkItem, normalizedIsbn: string): Lo
     isbn: normalizedIsbn,
     categories,
     suggestedCategorySlug: suggestCategory(language),
+    genre: null,
     source: 'crossref',
   }
 }
@@ -973,6 +1017,7 @@ function buildWikidataResult(binding: Record<string, { value?: string }>, normal
     isbn: normalizedIsbn,
     categories,
     suggestedCategorySlug: suggestCategory(language),
+    genre: null,
     source: 'wikidata',
   }
 }
@@ -1122,6 +1167,7 @@ async function lookupIAByIsbn(searchIsbn: string, normalizedIsbn: string): Promi
     isbn: normalizedIsbn,
     categories: [],
     suggestedCategorySlug: suggestCategory(language),
+    genre: null,
     source: 'internet-archive',
   }
 }
@@ -1325,6 +1371,7 @@ async function lookupWorldCatByIsbn(searchIsbn: string, normalizedIsbn: string):
       isbn: normalizedIsbn,
       categories: work.genre || [],
       suggestedCategorySlug: suggestCategory(inferLanguageFromIsbn(normalizedIsbn)),
+    genre: null,
       source: 'worldcat',
     }
   }
@@ -1351,6 +1398,7 @@ function parseWorldCatXml(xml: string, normalizedIsbn: string): LookupResult | n
         isbn: normalizedIsbn,
         categories: [],
         suggestedCategorySlug: suggestCategory(inferLanguageFromIsbn(normalizedIsbn)),
+    genre: null,
         source: 'worldcat',
       }
     }
@@ -1399,6 +1447,7 @@ function parseWorldCatXml(xml: string, normalizedIsbn: string): LookupResult | n
     isbn: normalizedIsbn,
     categories: genres,
     suggestedCategorySlug: suggestCategory(lang),
+    genre: null,
     source: 'worldcat',
   }
 }
@@ -1420,6 +1469,7 @@ function buildWorldCatResult(record: WorldCatClassifyRecord, normalizedIsbn: str
     isbn: normalizedIsbn,
     categories: record.genre || [],
     suggestedCategorySlug: suggestCategory(language),
+    genre: null,
     source: 'worldcat',
   }
 }
@@ -1554,6 +1604,7 @@ function parseDNBMarcXml(xml: string, normalizedIsbn: string): LookupResult | nu
     isbn: normalizedIsbn,
     categories,
     suggestedCategorySlug: suggestCategory(language),
+    genre: null,
     source: 'dnb',
   }
 }
@@ -1703,6 +1754,7 @@ function parseSUDOCXml(xml: string, normalizedIsbn: string): LookupResult | null
     isbn: normalizedIsbn,
     categories,
     suggestedCategorySlug: suggestCategory(language),
+    genre: null,
     source: 'sudoc',
   }
 }
@@ -1876,6 +1928,7 @@ async function lookupInventaireByIsbn(searchIsbn: string, normalizedIsbn: string
     isbn: normalizedIsbn,
     categories,
     suggestedCategorySlug: suggestCategory(language),
+    genre: null,
     source: 'inventaire',
   }
 }
@@ -1994,6 +2047,7 @@ async function lookupHathiTrust(isbn: string): Promise<LookupResult | null> {
           isbn: normalizedIsbn,
           categories: [],
           suggestedCategorySlug: suggestCategory(language),
+    genre: null,
           source: 'hathitrust',
         }
       } catch {
@@ -2089,6 +2143,7 @@ async function lookupLibraryThing(isbn: string): Promise<LookupResult | null> {
       isbn: normalizedIsbn,
       categories: [],
       suggestedCategorySlug: suggestCategory(language),
+    genre: null,
       source: 'librarything',
     }
   } catch (error) {
@@ -2165,6 +2220,7 @@ async function lookupGoogleBooksArabic(isbn: string): Promise<LookupResult | nul
             isbn: normalizedIsbn,
             categories: volumeInfo.categories || [],
             suggestedCategorySlug: suggestCategory(language),
+    genre: null,
             source: 'google-arabic',
           }
         }
@@ -2400,6 +2456,7 @@ Important rules:
       isbn: normalizedIsbn,
       categories,
       suggestedCategorySlug: suggestCategory(language),
+    genre: null,
       source: 'web-search',
     }
   } catch (error) {
@@ -2792,6 +2849,11 @@ export async function lookupISBN(isbn: string): Promise<{
   // Cross-source enrichment: fill missing fields from other sources
   const otherResults = allResults.filter(r => r.source !== bestResult.source)
   bestResult = enrichResult(bestResult, otherResults)
+
+  // Genre classification from merged categories
+  if (bestResult.categories.length > 0) {
+    bestResult.genre = classifyGenre(bestResult.categories)
+  }
 
   // Cover enrichment: if still no cover, try dedicated cover APIs
   if (!bestResult.coverUrl) {

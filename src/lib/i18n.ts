@@ -56,9 +56,11 @@ type TranslationKeys = {
     sortBy: string
     priceRange: string
     category: string
+    genre: string
     author: string
     language: string
     allCategories: string
+    allGenres: string
     allAuthors: string
     allLanguages: string
     resetFilters: string
@@ -415,9 +417,11 @@ const translations: Record<Language, TranslationKeys> = {
       sortBy: 'Trier par',
       priceRange: 'Fourchette de prix',
       category: 'Catégorie',
+      genre: 'Genre',
       author: 'Auteur',
       language: 'Langue',
       allCategories: 'Toutes les catégories',
+      allGenres: 'Tous les genres',
       allAuthors: 'Tous les auteurs',
       allLanguages: 'Toutes les langues',
       resetFilters: 'Réinitialiser les filtres',
@@ -764,9 +768,11 @@ const translations: Record<Language, TranslationKeys> = {
       sortBy: 'ترتيب حسب',
       priceRange: 'نطاق السعر',
       category: 'الفئة',
+      genre: 'النوع',
       author: 'المؤلف',
       language: 'اللغة',
       allCategories: 'جميع الفئات',
+      allGenres: 'جميع الأنواع',
       allAuthors: 'جميع المؤلفين',
       allLanguages: 'جميع اللغات',
       resetFilters: 'إعادة تعيين الفلاتر',
@@ -1113,9 +1119,11 @@ const translations: Record<Language, TranslationKeys> = {
       sortBy: 'Sort By',
       priceRange: 'Price Range',
       category: 'Category',
+      genre: 'Genre',
       author: 'Author',
       language: 'Language',
       allCategories: 'All Categories',
+      allGenres: 'All Genres',
       allAuthors: 'All Authors',
       allLanguages: 'All Languages',
       resetFilters: 'Reset Filters',

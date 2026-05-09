@@ -19,6 +19,7 @@ export interface BookData {
   priceSale: number | null
   language: string
   categorySlug: string | null
+  genre: string | null
   isAvailable: boolean
 }
 
@@ -38,8 +39,29 @@ const languageColors: Record<string, string> = {
   en: 'bg-amber-100 text-amber-800',
 }
 
+const genreLabels: Record<string, { fr: string; ar: string; en: string }> = {
+  roman: { fr: 'Roman', ar: 'رواية', en: 'Fiction' },
+  histoire: { fr: 'Histoire', ar: 'تاريخ', en: 'History' },
+  sciences: { fr: 'Sciences', ar: 'علوم', en: 'Science' },
+  philosophie: { fr: 'Philosophie', ar: 'فلسفة', en: 'Philosophy' },
+  religion: { fr: 'Religion', ar: 'دين', en: 'Religion' },
+  poesie: { fr: 'Poésie', ar: 'شعر', en: 'Poetry' },
+  enfants: { fr: 'Enfants', ar: 'أطفال', en: 'Children' },
+  biographie: { fr: 'Biographie', ar: 'سيرة', en: 'Biography' },
+  education: { fr: 'Éducation', ar: 'تعليم', en: 'Education' },
+  politique: { fr: 'Politique', ar: 'سياسة', en: 'Politics' },
+  art: { fr: 'Art', ar: 'فن', en: 'Art' },
+  economie: { fr: 'Économie', ar: 'اقتصاد', en: 'Economics' },
+  droit: { fr: 'Droit', ar: 'قانون', en: 'Law' },
+  medecine: { fr: 'Médecine', ar: 'طب', en: 'Medicine' },
+  psychologie: { fr: 'Psychologie', ar: 'علم نفس', en: 'Psychology' },
+  informatique: { fr: 'Informatique', ar: 'حاسوب', en: 'Computers' },
+  sociologie: { fr: 'Sociologie', ar: 'علم اجتماع', en: 'Sociology' },
+  lettres: { fr: 'Lettres', ar: 'أدب', en: 'Literature' },
+}
+
 export function BookCard({ book }: BookCardProps) {
-  const { t } = useTranslation()
+  const { t, language } = useTranslation()
   const navigate = useRouterStore((s) => s.navigate)
   const addItem = useCartStore((s) => s.addItem)
   const [isAdding, setIsAdding] = useState(false)
@@ -110,6 +132,11 @@ export function BookCard({ book }: BookCardProps) {
           <p className="text-xs text-muted-foreground line-clamp-1">
             {book.author}
           </p>
+          {book.genre && (
+            <span className="text-[10px] text-muted-foreground truncate">
+              {genreLabels[book.genre]?.[language] || genreLabels[book.genre]?.fr || book.genre}
+            </span>
+          )}
           <div className="flex items-center justify-between pt-1">
             <span className="text-base font-bold text-gold">
               {book.priceSale ? `${book.priceSale.toLocaleString()} ${t('common.da')}` : '—'}

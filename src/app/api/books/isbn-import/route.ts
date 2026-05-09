@@ -69,6 +69,7 @@ export async function POST(request: NextRequest) {
             language: lookupResult.language,
             publishDate: lookupResult.publishDate,
             categorySlug: lookupResult.suggestedCategorySlug,
+            genre: lookupResult.genre,
             priceSale,
             pricePrint: pricePurchase,
             margin,

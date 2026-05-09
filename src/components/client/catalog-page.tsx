@@ -47,18 +47,41 @@ const languageOptions = [
   { value: 'en', labelFr: 'Anglais', labelAr: 'الإنجليزية', labelEn: 'English' },
 ]
 
+const genreLabels: Record<string, { fr: string; ar: string; en: string }> = {
+  roman: { fr: 'Roman', ar: 'رواية', en: 'Fiction' },
+  histoire: { fr: 'Histoire', ar: 'تاريخ', en: 'History' },
+  sciences: { fr: 'Sciences', ar: 'علوم', en: 'Science' },
+  philosophie: { fr: 'Philosophie', ar: 'فلسفة', en: 'Philosophy' },
+  religion: { fr: 'Religion', ar: 'دين', en: 'Religion' },
+  poesie: { fr: 'Poésie', ar: 'شعر', en: 'Poetry' },
+  enfants: { fr: 'Enfants', ar: 'أطفال', en: 'Children' },
+  biographie: { fr: 'Biographie', ar: 'سيرة', en: 'Biography' },
+  education: { fr: 'Éducation', ar: 'تعليم', en: 'Education' },
+  politique: { fr: 'Politique', ar: 'سياسة', en: 'Politics' },
+  art: { fr: 'Art', ar: 'فن', en: 'Art' },
+  economie: { fr: 'Économie', ar: 'اقتصاد', en: 'Economics' },
+  droit: { fr: 'Droit', ar: 'قانون', en: 'Law' },
+  medecine: { fr: 'Médecine', ar: 'طب', en: 'Medicine' },
+  psychologie: { fr: 'Psychologie', ar: 'علم نفس', en: 'Psychology' },
+  informatique: { fr: 'Informatique', ar: 'حاسوب', en: 'Computers' },
+  sociologie: { fr: 'Sociologie', ar: 'علم اجتماع', en: 'Sociology' },
+  lettres: { fr: 'Lettres', ar: 'أدب', en: 'Literature' },
+}
+
 export function CatalogPage() {
   const { t, language } = useTranslation()
   const params = useRouterStore((s) => s.params)
 
   const [books, setBooks] = useState<BookData[]>([])
   const [categories, setCategories] = useState<Category[]>([])
+  const [genres, setGenres] = useState<Array<{ genre: string; count: number }>>([])
   const [pagination, setPagination] = useState<PaginationInfo>({ page: 1, limit: 12, total: 0, totalPages: 0 })
   const [loading, setLoading] = useState(true)
 
   // Filters
   const [search, setSearch] = useState('')
   const [selectedCategory, setSelectedCategory] = useState(params.category || '')
+  const [selectedGenre, setSelectedGenre] = useState(params.genre || '')
   const [selectedLanguage, setSelectedLanguage] = useState(params.language || '')
   const [minPrice, setMinPrice] = useState('')
   const [maxPrice, setMaxPrice] = useState('')
@@ -73,6 +96,12 @@ export function CatalogPage() {
         setCategories(data.categories || data || [])
       })
       .catch(() => {})
+    fetch('/api/books/genres')
+      .then((res) => res.json())
+      .then((data) => {
+        setGenres(data.genres || [])
+      })
+      .catch(() => {})
   }, [])
 
   // Fetch books
@@ -84,6 +113,7 @@ export function CatalogPage() {
       searchParams.set('limit', '12')
       if (search) searchParams.set('search', search)
       if (selectedCategory) searchParams.set('category', selectedCategory)
+      if (selectedGenre) searchParams.set('genre', selectedGenre)
       if (selectedLanguage) searchParams.set('language', selectedLanguage)
       if (minPrice) searchParams.set('minPrice', minPrice)
       if (maxPrice) searchParams.set('maxPrice', maxPrice)
@@ -110,7 +140,7 @@ export function CatalogPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, search, selectedCategory, selectedLanguage, minPrice, maxPrice, sortBy])
+  }, [page, search, selectedCategory, selectedGenre, selectedLanguage, minPrice, maxPrice, sortBy])
 
   useEffect(() => {
     fetchBooks()
@@ -128,6 +158,7 @@ export function CatalogPage() {
 
   const resetFilters = () => {
     setSelectedCategory('')
+    setSelectedGenre('')
     setSelectedLanguage('')
     setMinPrice('')
     setMaxPrice('')
@@ -139,6 +170,7 @@ export function CatalogPage() {
 
   const activeFilterCount = [
     selectedCategory,
+    selectedGenre,
     selectedLanguage,
     minPrice,
     maxPrice,
@@ -154,6 +186,10 @@ export function CatalogPage() {
     if (language === 'ar') return opt.labelAr
     if (language === 'en') return opt.labelEn
     return opt.labelFr
+  }
+
+  const getGenreLabel = (slug: string) => {
+    return genreLabels[slug]?.[language] || genreLabels[slug]?.fr || slug
   }
 
   const FilterContent = () => (
@@ -192,6 +228,26 @@ export function CatalogPage() {
             {languageOptions.map((opt) => (
               <SelectItem key={opt.value} value={opt.value}>
                 {getLangLabel(opt)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Genre */}
+      <div>
+        <label className="text-sm font-medium text-foreground mb-1.5 block">
+          {t('catalog.genre') || 'Genre'}
+        </label>
+        <Select value={selectedGenre} onValueChange={(v) => { setSelectedGenre(v === '__all__' ? '' : v); setPage(1) }}>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder={t('catalog.allGenres') || 'Tous les genres'} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">{t('catalog.allGenres') || 'Tous les genres'}</SelectItem>
+            {genres.map((g) => (
+              <SelectItem key={g.genre} value={g.genre!}>
+                {getGenreLabel(g.genre)} ({g.count})
               </SelectItem>
             ))}
           </SelectContent>
@@ -317,6 +373,14 @@ export function CatalogPage() {
                 <Badge variant="secondary" className="gap-1">
                   {getLangLabel(languageOptions.find((o) => o.value === selectedLanguage)!)}
                   <button onClick={() => { setSelectedLanguage(''); setPage(1) }}>
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              )}
+              {selectedGenre && (
+                <Badge variant="secondary" className="gap-1">
+                  {getGenreLabel(selectedGenre)}
+                  <button onClick={() => { setSelectedGenre(''); setPage(1) }}>
                     <X className="h-3 w-3" />
                   </button>
                 </Badge>

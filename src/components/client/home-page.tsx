@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   BookOpen, Printer, Award, Library, Truck,
-  ArrowRight, Sparkles, Info
+  ArrowRight, Sparkles, Info, Tag
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -74,19 +74,48 @@ const fadeUp = {
   }),
 }
 
+const genreLabels: Record<string, { fr: string; ar: string; en: string; icon: string }> = {
+  roman: { fr: 'Roman', ar: 'رواية', en: 'Fiction', icon: '📚' },
+  histoire: { fr: 'Histoire', ar: 'تاريخ', en: 'History', icon: '🏛️' },
+  sciences: { fr: 'Sciences', ar: 'علوم', en: 'Science', icon: '🔬' },
+  philosophie: { fr: 'Philosophie', ar: 'فلسفة', en: 'Philosophy', icon: '💭' },
+  religion: { fr: 'Religion', ar: 'دين', en: 'Religion', icon: '🕌' },
+  poesie: { fr: 'Poésie', ar: 'شعر', en: 'Poetry', icon: '✍️' },
+  enfants: { fr: 'Enfants', ar: 'أطفال', en: 'Children', icon: '🧒' },
+  biographie: { fr: 'Biographie', ar: 'سيرة', en: 'Biography', icon: '👤' },
+  education: { fr: 'Éducation', ar: 'تعليم', en: 'Education', icon: '🎓' },
+  politique: { fr: 'Politique', ar: 'سياسة', en: 'Politics', icon: '⚖️' },
+  art: { fr: 'Art', ar: 'فن', en: 'Art', icon: '🎨' },
+  economie: { fr: 'Économie', ar: 'اقتصاد', en: 'Economics', icon: '📊' },
+  droit: { fr: 'Droit', ar: 'قانون', en: 'Law', icon: '📜' },
+  medecine: { fr: 'Médecine', ar: 'طب', en: 'Medicine', icon: '🏥' },
+  psychologie: { fr: 'Psychologie', ar: 'علم نفس', en: 'Psychology', icon: '🧠' },
+  informatique: { fr: 'Informatique', ar: 'حاسوب', en: 'Computers', icon: '💻' },
+  sociologie: { fr: 'Sociologie', ar: 'علم اجتماع', en: 'Sociology', icon: '👥' },
+  lettres: { fr: 'Lettres', ar: 'أدب', en: 'Literature', icon: '📖' },
+}
+
 export function HomePage() {
   const { t, language } = useTranslation()
   const navigate = useRouterStore((s) => s.navigate)
   const [featuredBooks, setFeaturedBooks] = useState<BookData[]>([])
+  const [genres, setGenres] = useState<Array<{ genre: string; count: number }>>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    async function fetchFeatured() {
+    async function fetchData() {
       try {
-        const res = await fetch('/api/books?limit=8')
-        if (res.ok) {
-          const data = await res.json()
+        const [booksRes, genresRes] = await Promise.all([
+          fetch('/api/books?limit=8'),
+          fetch('/api/books/genres'),
+        ])
+        if (booksRes.ok) {
+          const data = await booksRes.json()
           setFeaturedBooks(data.books || [])
+        }
+        if (genresRes.ok) {
+          const data = await genresRes.json()
+          setGenres((data.genres || []).slice(0, 8))
         }
       } catch {
         // silently handle
@@ -94,7 +123,7 @@ export function HomePage() {
         setLoading(false)
       }
     }
-    fetchFeatured()
+    fetchData()
   }, [])
 
   const getCategoryTitle = (cat: CategoryCard) => {
@@ -108,6 +137,17 @@ export function HomePage() {
     if (language === 'en') return cat.descEn
     return cat.descFr
   }
+
+  const getGenreLabel = (slug: string) => {
+    return genreLabels[slug]?.[language] || genreLabels[slug]?.fr || slug
+  }
+
+  const getGenreIcon = (slug: string) => {
+    return genreLabels[slug]?.icon || '📖'
+  }
+
+  const browseByGenreTitle = language === 'ar' ? 'تصفح حسب النوع' : language === 'en' ? 'Browse by Genre' : 'Parcourir par genre'
+  const browseByGenreDesc = language === 'ar' ? 'ابحث عن كتب حسب نوعها الأدبي' : language === 'en' ? 'Find books by their literary genre' : 'Trouvez des livres par genre littéraire'
 
   const whyFeatures = [
     { icon: <Printer className="h-8 w-8 text-gold" />, title: t('home.fastPrinting'), desc: t('home.fastPrintingDesc') },
@@ -254,6 +294,58 @@ export function HomePage() {
           )}
         </div>
       </section>
+
+      {/* Browse by Genre */}
+      {genres.length > 0 && (
+      <section className="py-12 sm:py-16">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: '-50px' }}
+            className="text-center mb-10"
+          >
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gold/10 text-gold text-sm font-medium mb-4">
+              <Tag className="h-4 w-4" />
+              {browseByGenreTitle}
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {browseByGenreDesc}
+            </p>
+          </motion.div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+            {genres.map((g, i) => (
+              <motion.div
+                key={g.genre}
+                custom={i}
+                variants={fadeUp}
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true, margin: '-30px' }}
+              >
+                <Card
+                  className="cursor-pointer group overflow-hidden border-border/50 hover:border-gold/40 hover:shadow-lg transition-all duration-300"
+                  onClick={() => navigate('catalog', { genre: g.genre })}
+                >
+                  <CardContent className="p-4 flex items-center gap-3">
+                    <span className="text-2xl">{getGenreIcon(g.genre)}</span>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-heading text-sm font-semibold text-navy truncate group-hover:text-gold transition-colors">
+                        {getGenreLabel(g.genre)}
+                      </h3>
+                      <p className="text-xs text-muted-foreground">
+                        {g.count} {t('catalog.books')}
+                      </p>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-gold transition-colors rtl-flip shrink-0" />
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+      )}
 
       {/* Why Kitabi */}
       <section className="py-12 sm:py-16">

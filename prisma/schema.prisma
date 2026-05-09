@@ -41,6 +41,7 @@ model Book {
   publishDate     String?
   categorySlug    String?
   category        Category? @relation(fields: [categorySlug], references: [slug])
+  genre            String?
   priceSale       Float?
   pricePrint      Float?
   margin          Float?

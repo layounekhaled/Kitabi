@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const language = searchParams.get('language')
     const category = searchParams.get('category')
+    const genre = searchParams.get('genre')
     const search = searchParams.get('search')
     const minPrice = searchParams.get('minPrice')
     const maxPrice = searchParams.get('maxPrice')
@@ -46,6 +47,10 @@ export async function GET(request: NextRequest) {
 
     if (category) {
       where.categorySlug = category
+    }
+
+    if (genre) {
+      where.genre = genre
     }
 
     if (search) {
