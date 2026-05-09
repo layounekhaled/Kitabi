@@ -2680,9 +2680,9 @@ export async function lookupISBN(isbn: string): Promise<{
     }
   }
 
-  // Validate check digit
+  // Validate check digit - with auto-correction for wrong last digit
   if (!isValidIsbn(cleanIsbn)) {
-    let suggestion = ''
+    let correctedIsbn: string | null = null
     if (cleanIsbn.length === 13) {
       const prefix = cleanIsbn.slice(0, 12)
       if (/^\d{12}$/.test(prefix)) {
@@ -2691,7 +2691,7 @@ export async function lookupISBN(isbn: string): Promise<{
           sum += parseInt(prefix[i], 10) * (i % 2 === 0 ? 1 : 3)
         }
         const correctCheck = (10 - (sum % 10)) % 10
-        suggestion = prefix + correctCheck
+        correctedIsbn = prefix + correctCheck
       }
     } else if (cleanIsbn.length === 10) {
       const prefix = cleanIsbn.slice(0, 9)
@@ -2703,12 +2703,24 @@ export async function lookupISBN(isbn: string): Promise<{
         const remainder = sum % 11
         const correctCheck = remainder === 0 ? 0 : 11 - remainder
         const checkChar = correctCheck === 10 ? 'X' : correctCheck.toString()
-        suggestion = prefix + checkChar
+        correctedIsbn = prefix + checkChar
       }
     }
 
-    const suggestionText = suggestion
-      ? ` Vouliez-vous dire : ${suggestion} ?`
+    // If we can auto-correct, try the corrected ISBN via recursive call
+    if (correctedIsbn && correctedIsbn !== cleanIsbn) {
+      console.log(`[ISBN Lookup] Auto-correcting ISBN: ${cleanIsbn} -> ${correctedIsbn}`)
+      const correctedResult = await lookupISBN(correctedIsbn)
+      if (correctedResult.result) {
+        return {
+          ...correctedResult,
+          warning: `ISBN corrigé automatiquement : ${cleanIsbn} -> ${correctedIsbn}`,
+        }
+      }
+    }
+
+    const suggestionText = correctedIsbn
+      ? ` ISBN corrigé: ${correctedIsbn} (non trouvé non plus)`
       : ''
 
     return {
