@@ -56,7 +56,11 @@ export async function POST(request: NextRequest) {
         const margin = 800 // marge fixe
         const priceSale = pricePurchase + margin // prix de vente
 
-        // Create draft book with auto-calculated prices
+        // Auto-publish if we have both cover AND price, otherwise keep as draft
+        const hasCover = !!lookupResult.coverUrl
+        const hasPrice = !!priceSale && priceSale > 0
+        const autoPublish = hasCover && hasPrice
+
         const book = await db.book.create({
           data: {
             isbn: lookupResult.isbn,
@@ -74,8 +78,9 @@ export async function POST(request: NextRequest) {
             pricePrint: pricePurchase,
             margin,
             printDelay: '3-5 jours',
-            isDraft: true,
-            isPublished: false,
+            isDraft: !autoPublish,
+            isPublished: autoPublish,
+            isAvailable: autoPublish,
           },
         })
 
@@ -83,6 +88,7 @@ export async function POST(request: NextRequest) {
           isbn: cleanIsbn,
           title: book.title,
           id: book.id,
+          published: autoPublish,
         })
 
         // Log warnings if any
@@ -95,6 +101,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const publishedCount = imported.filter(b => b.published).length
+    const draftCount = imported.filter(b => !b.published).length
+
     return NextResponse.json({
       imported,
       duplicates,
@@ -103,6 +112,8 @@ export async function POST(request: NextRequest) {
       summary: {
         total: isbns.length,
         imported: imported.length,
+        published: publishedCount,
+        drafts: draftCount,
         duplicates: duplicates.length,
         notFound: notFound.length,
         errors: errors.length,
