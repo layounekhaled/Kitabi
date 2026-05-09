@@ -53,6 +53,13 @@ interface LookupResult {
   source: string
 }
 
+interface PricingInfo {
+  pageCount: number
+  pricePurchase: number
+  margin: number
+  priceSale: number
+}
+
 interface ImportResult {
   isbn: string
   status: 'imported' | 'duplicate' | 'not_found' | 'error'
@@ -106,6 +113,12 @@ export default function AdminImport() {
       }
       setLookupResult(data.book)
       setCategorySlug(data.book.suggestedCategorySlug || '')
+      // Auto-fill prices from calculated pricing
+      if (data.pricing) {
+        setPriceSale(data.pricing.priceSale.toString())
+        setPricePrint(data.pricing.pricePurchase.toString())
+        setMargin(data.pricing.margin.toString())
+      }
       if (data.warning) {
         toast.warning(data.warning)
       }
@@ -301,36 +314,44 @@ export default function AdminImport() {
                   </div>
                 </div>
 
+                {/* Price info banner */}
+                <div className="p-3 bg-blue-50 rounded-lg text-blue-700 text-xs space-y-1">
+                  <p className="font-semibold">Calcul automatique des prix :</p>
+                  <p>Prix d'achat = ({lookupResult.pageCount || '?'} pages × 2,5 DA) + 200 DA (couverture)</p>
+                  <p>Marge fixe = 800 DA</p>
+                  <p className="font-semibold">Prix de vente = Prix d'achat + 800 DA</p>
+                </div>
+
                 {/* Price & Settings Form */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label className="text-xs">{t.admin.priceSale}</Label>
+                    <Label className="text-xs">{t.admin.priceSale} (DA)</Label>
                     <Input
                       type="number"
-                      step="0.01"
+                      step="1"
                       value={priceSale}
                       onChange={(e) => setPriceSale(e.target.value)}
-                      placeholder="0.00"
+                      placeholder="0"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs">{t.admin.pricePrint}</Label>
+                    <Label className="text-xs">{t.admin.pricePrint} - Prix d'achat (DA)</Label>
                     <Input
                       type="number"
-                      step="0.01"
+                      step="1"
                       value={pricePrint}
                       onChange={(e) => setPricePrint(e.target.value)}
-                      placeholder="0.00"
+                      placeholder="0"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs">{t.admin.margin}</Label>
+                    <Label className="text-xs">Marge (DA)</Label>
                     <Input
                       type="number"
-                      step="0.01"
+                      step="1"
                       value={margin}
                       onChange={(e) => setMargin(e.target.value)}
-                      placeholder="0.00"
+                      placeholder="800"
                     />
                   </div>
                   <div className="space-y-1.5">

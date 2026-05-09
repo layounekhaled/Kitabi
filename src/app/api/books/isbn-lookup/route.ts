@@ -38,7 +38,24 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const response: Record<string, unknown> = { book: result }
+    // Auto-calculate prices based on page count
+    // Prix d'achat = (pages × 2.5 DA) + 200 DA (couverture)
+    // Marge = 800 DA fixe
+    // Prix de vente = prix d'achat + marge = (pages × 2.5) + 1000 DA
+    const pages = result.pageCount || 300 // default 300 pages if unknown
+    const pricePurchase = Math.round((pages * 2.5) + 200)
+    const margin = 800
+    const priceSale = pricePurchase + margin
+
+    const response: Record<string, unknown> = {
+      book: result,
+      pricing: {
+        pageCount: pages,
+        pricePurchase,
+        margin,
+        priceSale,
+      },
+    }
     if (warning) {
       response.warning = warning
     }

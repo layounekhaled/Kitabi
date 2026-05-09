@@ -47,7 +47,16 @@ export async function POST(request: NextRequest) {
           continue
         }
 
-        // Create draft book
+        // Auto-calculate prices based on page count
+        // Prix d'achat = (pages × 2.5 DA) + 200 DA (couverture)
+        // Marge = 800 DA fixe
+        // Prix de vente = prix d'achat + marge = (pages × 2.5) + 1000 DA
+        const pages = lookupResult.pageCount || 300 // default 300 pages if unknown
+        const pricePurchase = Math.round((pages * 2.5) + 200) // prix d'achat
+        const margin = 800 // marge fixe
+        const priceSale = pricePurchase + margin // prix de vente
+
+        // Create draft book with auto-calculated prices
         const book = await db.book.create({
           data: {
             isbn: lookupResult.isbn,
@@ -60,6 +69,10 @@ export async function POST(request: NextRequest) {
             language: lookupResult.language,
             publishDate: lookupResult.publishDate,
             categorySlug: lookupResult.suggestedCategorySlug,
+            priceSale,
+            pricePrint: pricePurchase,
+            margin,
+            printDelay: '3-5 jours',
             isDraft: true,
             isPublished: false,
           },
