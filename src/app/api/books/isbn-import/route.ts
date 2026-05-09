@@ -47,19 +47,20 @@ export async function POST(request: NextRequest) {
           continue
         }
 
-        // Auto-calculate prices based on page count
+        // Auto-calculate prices based on page count (only if pages found in lookup)
         // Prix d'achat = (pages × 2.5 DA) + 200 DA (couverture)
         // Marge = 800 DA fixe
         // Prix de vente = prix d'achat + marge = (pages × 2.5) + 1000 DA
+        const hasRealPages = !!lookupResult.pageCount && lookupResult.pageCount > 0
         const pages = lookupResult.pageCount || 300 // default 300 pages if unknown
         const pricePurchase = Math.round((pages * 2.5) + 200) // prix d'achat
         const margin = 800 // marge fixe
         const priceSale = pricePurchase + margin // prix de vente
 
-        // Auto-publish if we have both cover AND price, otherwise keep as draft
+        // Auto-publish ONLY if we have BOTH cover URL AND real page count from lookup
+        // Otherwise keep as draft (brouillon)
         const hasCover = !!lookupResult.coverUrl
-        const hasPrice = !!priceSale && priceSale > 0
-        const autoPublish = hasCover && hasPrice
+        const autoPublish = hasCover && hasRealPages
 
         const book = await db.book.create({
           data: {
@@ -77,7 +78,6 @@ export async function POST(request: NextRequest) {
             priceSale,
             pricePrint: pricePurchase,
             margin,
-            printDelay: '3-5 jours',
             isDraft: !autoPublish,
             isPublished: autoPublish,
             isAvailable: autoPublish,
