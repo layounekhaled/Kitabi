@@ -23,37 +23,37 @@ const notoArabic = Noto_Sans_Arabic({
 });
 
 export const metadata: Metadata = {
-  title: "Kitabi - Librairie en ligne | Print-on-Demand",
+  title: "Kitibi - Librairie en ligne",
   description:
-    "Kitabi est votre librairie en ligne spécialisée dans l'impression à la demande. Des milliers de livres en français, arabe et anglais, imprimés avec soin et livrés partout en Algérie.",
+    "Kitibi est votre librairie en ligne. Des milliers de livres en français, arabe et anglais, livrés partout en Algérie.",
   keywords: [
-    "Kitabi",
+    "Kitibi",
     "librairie",
     "livre",
-    "impression à la demande",
-    "print on demand",
-    "Algérie",
     "livre en ligne",
+    "Algérie",
     "كتاب",
     "مكتبة",
+    "livre français",
+    "livre arabe",
   ],
-  authors: [{ name: "Kitabi" }],
+  authors: [{ name: "Kitibi" }],
   icons: {
     icon: "/logo.svg",
   },
   openGraph: {
-    title: "Kitabi - Librairie en ligne | Print-on-Demand",
+    title: "Kitibi - Librairie en ligne",
     description:
-      "Votre librairie en ligne, imprimée à la demande. Découvrez des milliers de livres et recevez-les partout en Algérie.",
+      "Votre librairie en ligne. Découvrez des milliers de livres et recevez-les partout en Algérie.",
     url: "https://kitabi.dz",
-    siteName: "Kitabi",
+    siteName: "Kitibi",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Kitabi - Librairie en ligne | Print-on-Demand",
+    title: "Kitibi - Librairie en ligne",
     description:
-      "Votre librairie en ligne, imprimée à la demande. Découvrez des milliers de livres et recevez-les partout en Algérie.",
+      "Votre librairie en ligne. Découvrez des milliers de livres et recevez-les partout en Algérie.",
   },
 };
 
