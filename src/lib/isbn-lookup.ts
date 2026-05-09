@@ -2751,7 +2751,11 @@ export async function lookupISBN(isbn: string): Promise<{
       .sort((a, b) => resultScore(b) - resultScore(a))[0]
 
     if (bestWithCover) {
-      console.log(`[ISBN Lookup] Fast return from ${bestWithCover.source} (score: ${resultScore(bestWithCover)})`)
+      // Classify genre before fast return
+      if (bestWithCover.categories.length > 0) {
+        bestWithCover.genre = classifyGenre(bestWithCover.categories)
+      }
+      console.log(`[ISBN Lookup] Fast return from ${bestWithCover.source} (score: ${resultScore(bestWithCover)}, genre: ${bestWithCover.genre || 'none'})`)
       return { result: bestWithCover }
     }
   }
@@ -2830,7 +2834,11 @@ export async function lookupISBN(isbn: string): Promise<{
         console.log(`[ISBN Lookup] Phase 3 ✓ Found by web-search`)
         // Try to enrich cover for web search results
         const enriched = await tryEnrichCover(webResult, normalizedIsbn)
-        console.log(`[ISBN Lookup] Best result from ${enriched.source} (score: ${resultScore(enriched)}, cover: ${enriched.coverUrl ? 'yes' : 'no'})`)
+        // Classify genre
+        if (enriched.categories.length > 0) {
+          enriched.genre = classifyGenre(enriched.categories)
+        }
+        console.log(`[ISBN Lookup] Best result from ${enriched.source} (score: ${resultScore(enriched)}, cover: ${enriched.coverUrl ? 'yes' : 'no'}, genre: ${enriched.genre || 'none'})`)
         return { result: enriched }
       }
     } catch (e) {

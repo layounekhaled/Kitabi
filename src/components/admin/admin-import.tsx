@@ -147,6 +147,7 @@ export default function AdminImport() {
           language: lookupResult.language,
           publishDate: lookupResult.publishDate,
           categorySlug: categorySlug || lookupResult.suggestedCategorySlug,
+          genre: lookupResult.genre,
           priceSale: priceSale ? parseFloat(priceSale) : null,
           pricePrint: pricePrint ? parseFloat(pricePrint) : null,
           margin: margin ? parseFloat(margin) : null,
