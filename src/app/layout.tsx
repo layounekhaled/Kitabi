@@ -23,11 +23,11 @@ const notoArabic = Noto_Sans_Arabic({
 });
 
 export const metadata: Metadata = {
-  title: "Kitibi - Librairie en ligne",
+  title: "Kitabi - Librairie en ligne",
   description:
-    "Kitibi est votre librairie en ligne. Des milliers de livres en français, arabe et anglais, livrés partout en Algérie.",
+    "Kitabi est votre librairie en ligne. Des milliers de livres en français, arabe et anglais, livrés partout en Algérie.",
   keywords: [
-    "Kitibi",
+    "Kitabi",
     "librairie",
     "livre",
     "livre en ligne",
@@ -37,21 +37,21 @@ export const metadata: Metadata = {
     "livre français",
     "livre arabe",
   ],
-  authors: [{ name: "Kitibi" }],
+  authors: [{ name: "Kitabi" }],
   icons: {
     icon: "/logo.svg",
   },
   openGraph: {
-    title: "Kitibi - Librairie en ligne",
+    title: "Kitabi - Librairie en ligne",
     description:
       "Votre librairie en ligne. Découvrez des milliers de livres et recevez-les partout en Algérie.",
     url: "https://kitabi.dz",
-    siteName: "Kitibi",
+    siteName: "Kitabi",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Kitibi - Librairie en ligne",
+    title: "Kitabi - Librairie en ligne",
     description:
       "Votre librairie en ligne. Découvrez des milliers de livres et recevez-les partout en Algérie.",
   },

@@ -1,7 +1,60 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
-  <rect width="512" height="512" rx="96" fill="#1B2A4A"/>
-  <path d="M160 140C160 140 180 128 220 128C260 128 280 140 280 140V372C280 372 260 364 220 364C180 364 160 372 160 372V140Z" fill="#C9A84C" stroke="#C9A84C" stroke-width="4"/>
-  <path d="M280 140C280 140 300 128 340 128C380 128 400 140 400 140V372C400 372 380 364 340 364C300 364 280 372 280 372V140Z" fill="#F5F0E8" stroke="#C9A84C" stroke-width="4"/>
-  <line x1="280" y1="140" x2="280" y2="372" stroke="#C9A84C" stroke-width="3"/>
-  <text x="256" y="440" text-anchor="middle" font-family="serif" font-size="72" font-weight="bold" fill="#C9A84C">Kitabi</text>
+  <!-- Background rounded square -->
+  <rect width="512" height="512" rx="100" fill="#1B2A4A"/>
+  
+  <!-- Subtle decorative circle -->
+  <circle cx="256" cy="200" r="130" fill="none" stroke="#C9A84C" stroke-width="1.5" opacity="0.2"/>
+  
+  <!-- Open Book - Left Page -->
+  <path d="M145 130C145 130 175 115 220 115C248 115 256 122 256 122V350C256 350 248 344 220 344C175 344 145 355 145 355V130Z" fill="#C9A84C" opacity="0.95">
+    <animate attributeName="d" 
+      values="M145 130C145 130 175 115 220 115C248 115 256 122 256 122V350C256 350 248 344 220 344C175 344 145 355 145 355V130Z;
+              M148 128C148 128 178 113 223 113C251 113 259 120 259 120V352C259 352 251 346 223 346C178 346 148 357 148 357V128Z;
+              M145 130C145 130 175 115 220 115C248 115 256 122 256 122V350C256 350 248 344 220 344C175 344 145 355 145 355V130Z"
+      dur="4s" repeatCount="indefinite"/>
+  </path>
+  
+  <!-- Open Book - Right Page -->
+  <path d="M256 122C256 122 264 115 292 115C337 115 367 130 367 130V355C367 355 337 344 292 344C264 344 256 350 256 350V122Z" fill="#F5F0E8" opacity="0.95">
+    <animate attributeName="d" 
+      values="M256 122C256 122 264 115 292 115C337 115 367 130 367 130V355C367 355 337 344 292 344C264 344 256 350 256 350V122Z;
+              M259 120C259 120 267 113 295 113C340 113 370 128 370 128V357C370 357 340 346 295 346C267 346 259 352 259 352V120Z;
+              M256 122C256 122 264 115 292 115C337 115 367 130 367 130V355C367 355 337 344 292 344C264 344 256 350 256 350V122Z"
+      dur="4s" repeatCount="indefinite"/>
+  </path>
+  
+  <!-- Book spine line -->
+  <line x1="256" y1="118" x2="256" y2="352" stroke="#C9A84C" stroke-width="2.5"/>
+  
+  <!-- Page lines - left page -->
+  <line x1="170" y1="175" x2="240" y2="170" stroke="#1B2A4A" stroke-width="1.5" opacity="0.2"/>
+  <line x1="170" y1="195" x2="240" y2="190" stroke="#1B2A4A" stroke-width="1.5" opacity="0.2"/>
+  <line x1="170" y1="215" x2="240" y2="210" stroke="#1B2A4A" stroke-width="1.5" opacity="0.2"/>
+  <line x1="170" y1="235" x2="225" y2="230" stroke="#1B2A4A" stroke-width="1.5" opacity="0.2"/>
+  
+  <!-- Page lines - right page -->
+  <line x1="272" y1="170" x2="342" y2="175" stroke="#1B2A4A" stroke-width="1.5" opacity="0.15"/>
+  <line x1="272" y1="190" x2="342" y2="195" stroke="#1B2A4A" stroke-width="1.5" opacity="0.15"/>
+  <line x1="272" y1="210" x2="342" y2="215" stroke="#1B2A4A" stroke-width="1.5" opacity="0.15"/>
+  <line x1="272" y1="230" x2="327" y2="235" stroke="#1B2A4A" stroke-width="1.5" opacity="0.15"/>
+  
+  <!-- Small star/sparkle decoration -->
+  <circle cx="370" cy="130" r="4" fill="#C9A84C" opacity="0.6">
+    <animate attributeName="opacity" values="0.6;1;0.6" dur="2s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="385" cy="148" r="2.5" fill="#C9A84C" opacity="0.4">
+    <animate attributeName="opacity" values="0.4;0.8;0.4" dur="2.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="393" cy="128" r="1.8" fill="#C9A84C" opacity="0.3">
+    <animate attributeName="opacity" values="0.3;0.7;0.3" dur="1.8s" repeatCount="indefinite"/>
+  </circle>
+  
+  <!-- Brand name "Kitabi" -->
+  <text x="256" y="430" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="78" font-weight="bold" fill="#C9A84C" letter-spacing="3">Kitabi</text>
+  
+  <!-- Subtle tagline -->
+  <text x="256" y="468" text-anchor="middle" font-family="'Segoe UI', Arial, sans-serif" font-size="16" fill="#C9A84C" opacity="0.5" letter-spacing="8" font-weight="300">LIBRAIRIE</text>
+  
+  <!-- Gold accent line under text -->
+  <line x1="176" y1="448" x2="336" y2="448" stroke="#C9A84C" stroke-width="1" opacity="0.3"/>
 </svg>

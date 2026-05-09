@@ -72,11 +72,13 @@ export function Header() {
             onClick={() => handleNavClick('home')}
             className="flex items-center gap-2.5 group"
           >
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gold/15">
-              <BookOpen className="h-5 w-5 text-gold transition-transform group-hover:scale-110" />
-            </div>
+            <img
+              src="/favicon.svg"
+              alt="Kitabi"
+              className="h-9 w-9 rounded-xl transition-transform group-hover:scale-110"
+            />
             <span className="font-heading text-xl sm:text-2xl font-bold text-gold tracking-wide">
-              Kitibi
+              Kitabi
             </span>
           </button>
 
@@ -167,8 +169,8 @@ export function Header() {
               <SheetContent side="end" className="w-72 bg-navy border-navy-light">
                 <SheetHeader>
                   <SheetTitle className="flex items-center gap-2 text-gold">
-                    <BookOpen className="h-5 w-5" />
-                    <span className="font-heading text-lg font-bold">Kitibi</span>
+                    <img src="/favicon.svg" alt="Kitabi" className="h-5 w-5" />
+                    <span className="font-heading text-lg font-bold">Kitabi</span>
                   </SheetTitle>
                 </SheetHeader>
                 <nav className="mt-6 flex flex-col gap-0.5">

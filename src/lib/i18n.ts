@@ -693,7 +693,7 @@ const translations: Record<Language, TranslationKeys> = {
     },
     footer: {
       about: 'À propos de Kitabi',
-      aboutDesc: 'Kitibi est votre librairie en ligne. Nous offrons une large sélection de livres en français, arabe et anglais, livrés partout en Algérie.',
+      aboutDesc: 'Kitabi est votre librairie en ligne. Nous offrons une large sélection de livres en français, arabe et anglais, livrés partout en Algérie.',
       quickLinks: 'Liens rapides',
       contactUs: 'Contactez-nous',
       followUs: 'Suivez-nous',
@@ -1395,7 +1395,7 @@ const translations: Record<Language, TranslationKeys> = {
     },
     footer: {
       about: 'About Kitabi',
-      aboutDesc: 'Kitibi is your online bookstore. We offer a wide selection of books in French, Arabic, and English, delivered across Algeria.',
+      aboutDesc: 'Kitabi is your online bookstore. We offer a wide selection of books in French, Arabic, and English, delivered across Algeria.',
       quickLinks: 'Quick Links',
       contactUs: 'Contact Us',
       followUs: 'Follow Us',

@@ -140,9 +140,9 @@ const testimonials = [
     nameFr: 'Karim M.',
     nameAr: 'كريم م.',
     nameEn: 'Karim M.',
-    textFr: 'Kitibi est devenu ma librairie préférée. Un large choix de livres en arabe et en français. Je recommande !',
+    textFr: 'Kitabi est devenu ma librairie préférée. Un large choix de livres en arabe et en français. Je recommande !',
     textAr: 'كتبي أصبحت مكتبتي المفضلة. تشكيلة واسعة من الكتب بالعربية والفرنسية. أنصح بها!',
-    textEn: 'Kitibi has become my favorite bookstore. A wide selection of books in Arabic and French. Highly recommended!',
+    textEn: 'Kitabi has become my favorite bookstore. A wide selection of books in Arabic and French. Highly recommended!',
     rating: 5,
   },
   {

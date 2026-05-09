@@ -15,7 +15,7 @@ export function Footer() {
           {/* About */}
           <div className="lg:col-span-1">
             <div className="flex items-center gap-2 mb-4">
-              <BookOpen className="h-6 w-6 text-gold" />
+              <img src="/favicon.svg" alt="Kitabi" className="h-6 w-6" />
               <span className="font-heading text-xl font-bold text-gold">Kitabi</span>
             </div>
             <p className="text-sm text-white/70 leading-relaxed">
