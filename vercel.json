@@ -2,6 +2,5 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "buildCommand": "npx prisma generate && npx prisma db push && next build",
-  "installCommand": "npm install --legacy-peer-deps",
-  "outputDirectory": ".next"
+  "installCommand": "npm install --legacy-peer-deps"
 }
