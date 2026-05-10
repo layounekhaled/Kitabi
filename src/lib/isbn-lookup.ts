@@ -18,13 +18,19 @@
 // 17. Google Books Arabic Query (broader search for Arabic ISBNs)
 // 18. Open Library Title Search Fallback (cover enrichment by title)
 // 19. Web Search (z-ai-web-dev-sdk) - last resort, searches the entire web
+// 20. Noor Library (Arabic digital library)
+// 21. Jarir (Arabic book retailer)
+// 22. Neel wa Furat (Arabic book retailer)
+// 23. Hindawi (Arabic digital publishing platform)
+// 24. Decitre (French book retailer)
+// 25. FNAC (French retailer)
 //
 // Strategy: Three-phase parallel lookup.
 // Phase 1: Fast sources (Google Books + Open Library) - return immediately if cover found
 // Phase 2: All remaining API sources in parallel - return best result
 // Phase 3: Web search fallback (only if all APIs fail) - searches entire web
-// Plus: Cross-source cover & metadata enrichment
-// Each source uses fetch() with individual timeouts 
+// Plus: Cross-source cover & metadata enrichment, description quality validation
+// Each source uses fetch() with individual timeouts
 
 // ============================================================
 // Types
@@ -2237,6 +2243,445 @@ async function lookupGoogleBooksArabic(isbn: string): Promise<LookupResult | nul
 }
 
 // ============================================================
+// Source 20: Noor Library (Arabic digital library)
+// Free, no auth. Excellent for Arabic books, especially religious,
+// educational, and cultural content.
+// ============================================================
+
+async function lookupNoorLibrary(isbn: string): Promise<LookupResult | null> {
+  try {
+    const normalizedIsbn = normalizeIsbn(isbn)
+    const isbn10 = isbn13To10(normalizedIsbn)
+
+    for (const variant of [normalizedIsbn, isbn10].filter(Boolean) as string[]) {
+      const result = await lookupNoorLibraryByIsbn(variant, normalizedIsbn)
+      if (result) return result
+    }
+
+    return null
+  } catch (error) {
+    console.error('[ISBN Lookup] Noor Library error:', error)
+    return null
+  }
+}
+
+async function lookupNoorLibraryByIsbn(searchIsbn: string, normalizedIsbn: string): Promise<LookupResult | null> {
+  const url = `https://www.noor-library.com/api/books?isbn=${encodeURIComponent(searchIsbn)}`
+
+  try {
+    const resp = await fetch(url, {
+      headers: { 'Accept': 'application/json' },
+    })
+    if (!resp.ok) return null
+
+    const data = await resp.json() as any
+    if (!data || !data.title) return null
+
+    let description: string | null = null
+    if (data.description) {
+      description = typeof data.description === 'string' ? data.description : null
+    }
+
+    const categories: string[] = []
+    if (data.category) categories.push(String(data.category))
+    if (data.categories && Array.isArray(data.categories)) {
+      categories.push(...data.categories.slice(0, 3).map(String))
+    }
+
+    return {
+      title: String(data.title || ''),
+      author: data.author ? String(data.author) : '',
+      description,
+      coverUrl: data.cover || data.image || data.coverUrl ? String(data.cover || data.image || data.coverUrl) : null,
+      publisher: data.publisher ? String(data.publisher) : null,
+      pageCount: data.pages || data.pageCount ? parseInt(String(data.pages || data.pageCount), 10) || null : null,
+      language: 'ar',
+      publishDate: data.publishDate || data.year ? String(data.publishDate || data.year) : null,
+      isbn: normalizedIsbn,
+      categories,
+      suggestedCategorySlug: 'livres-arabe',
+      genre: null,
+      source: 'noor-library',
+    }
+  } catch {
+    return null
+  }
+}
+
+// ============================================================
+// Source 21: Jarir Bookstore (Arabic book retailer)
+// Saudi-based retailer with excellent Arabic book database.
+// ============================================================
+
+async function lookupJarir(isbn: string): Promise<LookupResult | null> {
+  try {
+    const normalizedIsbn = normalizeIsbn(isbn)
+    const isbn10 = isbn13To10(normalizedIsbn)
+
+    for (const variant of [normalizedIsbn, isbn10].filter(Boolean) as string[]) {
+      const result = await lookupJarirByIsbn(variant, normalizedIsbn)
+      if (result) return result
+    }
+
+    return null
+  } catch (error) {
+    console.error('[ISBN Lookup] Jarir error:', error)
+    return null
+  }
+}
+
+async function lookupJarirByIsbn(searchIsbn: string, normalizedIsbn: string): Promise<LookupResult | null> {
+  const url = `https://www.jarir.com/api/catalog/search/product?q=${encodeURIComponent(searchIsbn)}&pageSize=5`
+
+  try {
+    const resp = await fetch(url, {
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (compatible; Kitabi/1.0)',
+      },
+    })
+    if (!resp.ok) return null
+
+    const data = await resp.json() as any
+    const products = data?.products || data?.data?.products || data?.items || []
+    if (!Array.isArray(products) || products.length === 0) return null
+
+    const book = products.find((p: any) =>
+      p.isbn === searchIsbn || p.isbn === normalizedIsbn ||
+      p.ean === searchIsbn || p.ean === normalizedIsbn
+    ) || products[0]
+
+    if (!book) return null
+
+    let description: string | null = null
+    if (book.description) {
+      const desc = typeof book.description === 'string' ? book.description : ''
+      description = desc.replace(/<[^>]+>/g, '').trim().substring(0, 500) || null
+    }
+
+    const categories: string[] = []
+    if (book.categoryName) categories.push(String(book.categoryName))
+    if (book.categories && Array.isArray(book.categories)) {
+      categories.push(...book.categories.slice(0, 3).map((c: any) => c.name || String(c)))
+    }
+
+    return {
+      title: String(book.name || book.title || ''),
+      author: book.author || book.authorName ? String(book.author || book.authorName) : '',
+      description,
+      coverUrl: book.image?.url || book.imageUrl || book.thumbnail ? String(book.image?.url || book.imageUrl || book.thumbnail) : null,
+      publisher: book.publisher || book.brand ? String(book.publisher || book.brand) : null,
+      pageCount: book.numberOfPages || book.pageCount ? parseInt(String(book.numberOfPages || book.pageCount), 10) || null : null,
+      language: 'ar',
+      publishDate: null,
+      isbn: normalizedIsbn,
+      categories,
+      suggestedCategorySlug: 'livres-arabe',
+      genre: null,
+      source: 'jarir',
+    }
+  } catch {
+    return null
+  }
+}
+
+// ============================================================
+// Source 22: Neel wa Furat (Arabic book retailer)
+// One of the largest Arabic book databases. Excellent for
+// Arabic literature, academic, and cultural books.
+// ============================================================
+
+async function lookupNeelWaFurat(isbn: string): Promise<LookupResult | null> {
+  try {
+    const normalizedIsbn = normalizeIsbn(isbn)
+    const isbn10 = isbn13To10(normalizedIsbn)
+
+    for (const variant of [normalizedIsbn, isbn10].filter(Boolean) as string[]) {
+      const result = await lookupNeelWaFuratByIsbn(variant, normalizedIsbn)
+      if (result) return result
+    }
+
+    return null
+  } catch (error) {
+    console.error('[ISBN Lookup] Neel wa Furat error:', error)
+    return null
+  }
+}
+
+async function lookupNeelWaFuratByIsbn(searchIsbn: string, normalizedIsbn: string): Promise<LookupResult | null> {
+  const url = `https://www.neelwafurat.com/api/search?q=${encodeURIComponent(searchIsbn)}&type=isbn`
+
+  try {
+    const resp = await fetch(url, {
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (compatible; Kitabi/1.0)',
+      },
+    })
+    if (!resp.ok) return null
+
+    const text = await resp.text()
+
+    // Neel wa Furat might return HTML or JSON
+    if (text.trim().startsWith('{') || text.trim().startsWith('[')) {
+      const data = JSON.parse(text) as any
+      const books = Array.isArray(data) ? data : (data.books || data.results || data.data || [])
+      if (!Array.isArray(books) || books.length === 0) return null
+
+      const book = books[0]
+      if (!book) return null
+
+      let description: string | null = null
+      if (book.description) {
+        description = typeof book.description === 'string'
+          ? book.description.replace(/<[^>]+>/g, '').trim().substring(0, 500) || null
+          : null
+      }
+
+      return {
+        title: String(book.title || book.name || ''),
+        author: book.author ? String(book.author) : '',
+        description,
+        coverUrl: book.cover || book.image ? String(book.cover || book.image) : null,
+        publisher: book.publisher ? String(book.publisher) : null,
+        pageCount: book.pages ? parseInt(String(book.pages), 10) || null : null,
+        language: 'ar',
+        publishDate: book.year || book.date ? String(book.year || book.date) : null,
+        isbn: normalizedIsbn,
+        categories: book.category ? [String(book.category)] : [],
+        suggestedCategorySlug: 'livres-arabe',
+        genre: null,
+        source: 'neel-wa-furat',
+      }
+    }
+
+    return null
+  } catch {
+    return null
+  }
+}
+
+// ============================================================
+// Source 23: Hindawi (Arabic digital publishing platform)
+// Free, no auth. Excellent for modern Arabic books,
+// especially academic and literary works.
+// ============================================================
+
+async function lookupHindawi(isbn: string): Promise<LookupResult | null> {
+  try {
+    const normalizedIsbn = normalizeIsbn(isbn)
+    const isbn10 = isbn13To10(normalizedIsbn)
+
+    for (const variant of [normalizedIsbn, isbn10].filter(Boolean) as string[]) {
+      const result = await lookupHindawiByIsbn(variant, normalizedIsbn)
+      if (result) return result
+    }
+
+    return null
+  } catch (error) {
+    console.error('[ISBN Lookup] Hindawi error:', error)
+    return null
+  }
+}
+
+async function lookupHindawiByIsbn(searchIsbn: string, normalizedIsbn: string): Promise<LookupResult | null> {
+  const url = `https://www.hindawi.org/api/books?isbn=${encodeURIComponent(searchIsbn)}`
+
+  try {
+    const resp = await fetch(url, {
+      headers: { 'Accept': 'application/json' },
+    })
+    if (!resp.ok) return null
+
+    const data = await resp.json() as any
+    if (!data || !data.title) return null
+
+    let description: string | null = null
+    if (data.description || data.about) {
+      const desc = String(data.description || data.about || '')
+      description = desc.replace(/<[^>]+>/g, '').trim().substring(0, 500) || null
+    }
+
+    const categories: string[] = []
+    if (data.category) categories.push(String(data.category))
+    if (data.tags && Array.isArray(data.tags)) {
+      categories.push(...data.tags.slice(0, 3).map(String))
+    }
+
+    return {
+      title: String(data.title || ''),
+      author: data.author ? String(data.author) : '',
+      description,
+      coverUrl: data.cover || data.coverUrl || data.thumbnail ? String(data.cover || data.coverUrl || data.thumbnail) : null,
+      publisher: data.publisher ? String(data.publisher) : null,
+      pageCount: data.pageCount || data.pages ? parseInt(String(data.pageCount || data.pages), 10) || null : null,
+      language: 'ar',
+      publishDate: data.publishYear || data.year ? String(data.publishYear || data.year) : null,
+      isbn: normalizedIsbn,
+      categories,
+      suggestedCategorySlug: 'livres-arabe',
+      genre: null,
+      source: 'hindawi',
+    }
+  } catch {
+    return null
+  }
+}
+
+// ============================================================
+// Source 24: Decitre (French book retailer)
+// Major French book retailer with excellent French book metadata.
+// ============================================================
+
+async function lookupDecitre(isbn: string): Promise<LookupResult | null> {
+  try {
+    const normalizedIsbn = normalizeIsbn(isbn)
+    const isbn10 = isbn13To10(normalizedIsbn)
+
+    for (const variant of [normalizedIsbn, isbn10].filter(Boolean) as string[]) {
+      const result = await lookupDecitreByIsbn(variant, normalizedIsbn)
+      if (result) return result
+    }
+
+    return null
+  } catch (error) {
+    console.error('[ISBN Lookup] Decitre error:', error)
+    return null
+  }
+}
+
+async function lookupDecitreByIsbn(searchIsbn: string, normalizedIsbn: string): Promise<LookupResult | null> {
+  const url = `https://www.decitre.fr/api/books/v1/isbn/${encodeURIComponent(searchIsbn)}`
+
+  try {
+    const resp = await fetch(url, {
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (compatible; Kitabi/1.0)',
+      },
+    })
+    if (!resp.ok) return null
+
+    const data = await resp.json() as any
+    if (!data || !data.title) return null
+
+    let description: string | null = null
+    if (data.description || data.summary) {
+      const desc = String(data.description || data.summary || '')
+      description = desc.replace(/<[^>]+>/g, '').trim().substring(0, 500) || null
+    }
+
+    const categories: string[] = []
+    if (data.category) categories.push(String(data.category))
+    if (data.categories && Array.isArray(data.categories)) {
+      categories.push(...data.categories.slice(0, 3).map(String))
+    }
+    if (data.themes && Array.isArray(data.themes)) {
+      categories.push(...data.themes.slice(0, 3).map(String))
+    }
+
+    let coverUrl: string | null = null
+    if (data.coverUrl || data.image || data.imageUrl) {
+      coverUrl = String(data.coverUrl || data.image || data.imageUrl)
+      if (!coverUrl.startsWith('http')) coverUrl = null
+    }
+
+    return {
+      title: String(data.title || ''),
+      author: data.author ? String(data.author) : '',
+      description,
+      coverUrl,
+      publisher: data.publisher ? String(data.publisher) : null,
+      pageCount: data.pageCount || data.nbPages ? parseInt(String(data.pageCount || data.nbPages), 10) || null : null,
+      language: normalizeLanguage(data.language),
+      publishDate: data.publishDate || data.parutionDate ? String(data.publishDate || data.parutionDate) : null,
+      isbn: normalizedIsbn,
+      categories,
+      suggestedCategorySlug: 'livres-francais',
+      genre: null,
+      source: 'decitre',
+    }
+  } catch {
+    return null
+  }
+}
+
+// ============================================================
+// Source 25: FNAC (French retailer)
+// Major French retailer with excellent book metadata and covers.
+// ============================================================
+
+async function lookupFNAC(isbn: string): Promise<LookupResult | null> {
+  try {
+    const normalizedIsbn = normalizeIsbn(isbn)
+    const isbn10 = isbn13To10(normalizedIsbn)
+
+    for (const variant of [normalizedIsbn, isbn10].filter(Boolean) as string[]) {
+      const result = await lookupFNACByIsbn(variant, normalizedIsbn)
+      if (result) return result
+    }
+
+    return null
+  } catch (error) {
+    console.error('[ISBN Lookup] FNAC error:', error)
+    return null
+  }
+}
+
+async function lookupFNACByIsbn(searchIsbn: string, normalizedIsbn: string): Promise<LookupResult | null> {
+  const url = `https://fnac.com/api/v1/product/isbn/${encodeURIComponent(searchIsbn)}`
+
+  try {
+    const resp = await fetch(url, {
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (compatible; Kitabi/1.0)',
+      },
+    })
+    if (!resp.ok) return null
+
+    const data = await resp.json() as any
+    if (!data || !data.title) return null
+
+    let description: string | null = null
+    if (data.description || data.summary) {
+      const desc = String(data.description || data.summary || '')
+      description = desc.replace(/<[^>]+>/g, '').trim().substring(0, 500) || null
+    }
+
+    const categories: string[] = []
+    if (data.category) categories.push(String(data.category))
+    if (data.categories && Array.isArray(data.categories)) {
+      categories.push(...data.categories.slice(0, 3).map(String))
+    }
+
+    let coverUrl: string | null = null
+    if (data.coverUrl || data.image || data.imageUrl) {
+      coverUrl = String(data.coverUrl || data.image || data.imageUrl)
+      if (!coverUrl.startsWith('http')) coverUrl = null
+    }
+
+    return {
+      title: String(data.title || ''),
+      author: data.author ? String(data.author) : '',
+      description,
+      coverUrl,
+      publisher: data.publisher ? String(data.publisher) : null,
+      pageCount: data.pageCount || data.nbPages ? parseInt(String(data.pageCount || data.nbPages), 10) || null : null,
+      language: normalizeLanguage(data.language),
+      publishDate: data.publishDate || data.parutionDate ? String(data.publishDate || data.parutionDate) : null,
+      isbn: normalizedIsbn,
+      categories,
+      suggestedCategorySlug: 'livres-francais',
+      genre: null,
+      source: 'fnac',
+    }
+  } catch {
+    return null
+  }
+}
+
+// ============================================================
 // Source 18: Open Library Title Search Fallback
 // When we have a title but no cover, search Open Library by
 // title to find a matching cover image.
@@ -2539,10 +2984,27 @@ function enrichResult(base: LookupResult, others: LookupResult[]): LookupResult 
     if (withCover) enriched.coverUrl = withCover.coverUrl
   }
 
-  // Fill missing description from other sources
-  if (!enriched.description) {
-    const withDesc = others.find(r => r.description && r.description.length > 20)
-    if (withDesc) enriched.description = withDesc.description
+  // Fill missing description - PRIORITIZE Google Books descriptions
+  if (!enriched.description || enriched.description.length < 20) {
+    const googleResult = others.find(r => r.source === 'google' && r.description && r.description.length > 20)
+    if (googleResult && googleResult.description) {
+      enriched.description = googleResult.description
+    }
+  }
+  // Second pass: if still no good description, try any source with a quality description
+  if (!enriched.description || enriched.description.length < 20) {
+    const withDesc = others.find(r => r.description && r.description.length > 50 && !isCatalogDescription(r.description))
+    if (withDesc && withDesc.description) enriched.description = withDesc.description
+  }
+
+  // If base description is catalog-style, replace it with a better one
+  if (enriched.description && isCatalogDescription(enriched.description)) {
+    const betterDesc = others.find(r => r.description && r.description.length > 50 && !isCatalogDescription(r.description))
+    if (betterDesc && betterDesc.description) {
+      enriched.description = betterDesc.description
+    } else {
+      enriched.description = null // Reject catalog-style descriptions
+    }
   }
 
   // Fill missing publisher from other sources
@@ -2577,6 +3039,33 @@ function enrichResult(base: LookupResult, others: LookupResult[]): LookupResult 
   enriched.categories = allCategories
 
   return enriched
+}
+
+/**
+ * Detect catalog-style descriptions that are not real book descriptions
+ * Examples: "xxviii, 291 p. ; 22 cm", "1 vol. (XVI-346 p.)"
+ */
+function isCatalogDescription(desc: string): boolean {
+  if (!desc) return true
+  const trimmed = desc.trim()
+  const catalogPatterns = [
+    /^\d+\s*(p|pages?)\s*[.;,]/i,
+    /^\d+\s*vol/i,
+    /^\d+\s*p\.\s*;/i,
+    /^\d+\s*cm/i,
+    /\d+\s*p\.\s*;\s*\d+\s*cm/i,
+    /^\(?\d+\s*p/i,
+    /^bibliogr/i,
+    /^ill\./i,
+    /^[xivlcdm]+,?\s*\d+\s*p/i,
+    /^index/i,
+    /^\d+\s*x\s*\d+\s*(mm|cm)/i,
+  ]
+  if (trimmed.length < 100) {
+    return catalogPatterns.some(pattern => pattern.test(trimmed))
+  }
+  if (trimmed.length < 15) return true
+  return false
 }
 
 // ============================================================
@@ -2643,6 +3132,12 @@ function resultScore(result: LookupResult): number {
     'google-arabic': 1,
     'web-search': 0,
     'google-broad': 0,
+    'noor-library': 2,
+    'jarir': 2,
+    'neel-wa-furat': 2,
+    'hindawi': 2,
+    'decitre': 3,
+    'fnac': 3,
   }
   score += sourceBonus[result.source] || 0
 
@@ -2806,6 +3301,20 @@ export async function lookupISBN(isbn: string): Promise<{
     { name: 'librarything-10', fn: () => isbn10 ? lookupLibraryThing(isbn10) : Promise.resolve(null) },
     { name: 'google-arabic', fn: () => isArabicPrefix(normalizedIsbn) ? lookupGoogleBooksArabic(normalizedIsbn) : Promise.resolve(null) },
     { name: 'google-arabic-10', fn: () => (isArabicPrefix(normalizedIsbn) && isbn10) ? lookupGoogleBooksArabic(isbn10) : Promise.resolve(null) },
+    // Arabic sources
+    { name: 'noor-library', fn: () => isArabicPrefix(normalizedIsbn) ? lookupNoorLibrary(normalizedIsbn) : Promise.resolve(null) },
+    { name: 'noor-library-10', fn: () => (isArabicPrefix(normalizedIsbn) && isbn10) ? lookupNoorLibrary(isbn10) : Promise.resolve(null) },
+    { name: 'jarir', fn: () => isArabicPrefix(normalizedIsbn) ? lookupJarir(normalizedIsbn) : Promise.resolve(null) },
+    { name: 'jarir-10', fn: () => (isArabicPrefix(normalizedIsbn) && isbn10) ? lookupJarir(isbn10) : Promise.resolve(null) },
+    { name: 'neel-wa-furat', fn: () => isArabicPrefix(normalizedIsbn) ? lookupNeelWaFurat(normalizedIsbn) : Promise.resolve(null) },
+    { name: 'neel-wa-furat-10', fn: () => (isArabicPrefix(normalizedIsbn) && isbn10) ? lookupNeelWaFurat(isbn10) : Promise.resolve(null) },
+    { name: 'hindawi', fn: () => isArabicPrefix(normalizedIsbn) ? lookupHindawi(normalizedIsbn) : Promise.resolve(null) },
+    { name: 'hindawi-10', fn: () => (isArabicPrefix(normalizedIsbn) && isbn10) ? lookupHindawi(isbn10) : Promise.resolve(null) },
+    // French retailer sources
+    { name: 'decitre', fn: () => lookupDecitre(normalizedIsbn) },
+    { name: 'decitre-10', fn: () => isbn10 ? lookupDecitre(isbn10) : Promise.resolve(null) },
+    { name: 'fnac', fn: () => lookupFNAC(normalizedIsbn) },
+    { name: 'fnac-10', fn: () => isbn10 ? lookupFNAC(isbn10) : Promise.resolve(null) },
   ]
 
   const SOURCE_TIMEOUT = 10000 // 10 seconds per source
